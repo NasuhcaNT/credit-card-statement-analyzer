@@ -71,6 +71,7 @@ export default function Dashboard({ transactions }: DashboardProps) {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [selectedMerchant, setSelectedMerchant] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   const [dailySort,    toggleDailySort]    = useSort<"date" | "amount">("amount");
   const [citySort,     toggleCitySort]     = useSort<"name" | "value" | "percent">("value");
@@ -180,6 +181,13 @@ export default function Dashboard({ transactions }: DashboardProps) {
       .filter(t => t.merchant === selectedMerchant)
       .sort((a, b) => a.date.getTime() - b.date.getTime());
   }, [selectedMerchant, filteredTransactions]);
+
+  const selectedCategoryTransactions = useMemo(() => {
+    if (!selectedCategory) return [];
+    return filteredTransactions
+      .filter(t => t.category === selectedCategory)
+      .sort((a, b) => b.amountTry - a.amountTry);
+  }, [selectedCategory, filteredTransactions]);
 
   const handleDownloadCsv = () => {
     const headers = ["Tarih", "Mağaza", "Tutar (TL)", "Döviz", "Orijinal Tutar", "Şehir", "Kategori", "Dosya"];
@@ -421,18 +429,80 @@ export default function Dashboard({ transactions }: DashboardProps) {
 
         <TabsContent value="kategori" className="space-y-4">
           <Card>
-            <CardHeader><CardTitle>Kategorilere Göre Harcamalar</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle>Kategorilere Göre Harcamalar</CardTitle>
+              {!selectedCategory && <p className="text-xs text-muted-foreground mt-1">Bir kategoriye tıklayarak o kategorinin harcamalarını görün</p>}
+            </CardHeader>
             <CardContent className="h-[400px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={categoryData} layout="vertical" margin={{ left: 100 }}>
+                <BarChart
+                  data={categoryData}
+                  layout="vertical"
+                  margin={{ left: 100 }}
+                  onClick={(data) => {
+                    if (data?.activePayload?.[0]) {
+                      const name = (data.activePayload[0].payload as { name: string }).name;
+                      setSelectedCategory(prev => prev === name ? null : name);
+                    }
+                  }}
+                  style={{ cursor: "pointer" }}
+                >
                   <XAxis type="number" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis type="category" dataKey="name" fontSize={12} tickLine={false} axisLine={false} width={100} />
                   <Tooltip formatter={(val: number) => formatTL(val)} />
-                  <Bar dataKey="amount" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="amount" radius={[0, 4, 4, 0]}>
+                    {categoryData.map((entry) => (
+                      <Cell
+                        key={entry.name}
+                        fill={selectedCategory === entry.name ? "hsl(var(--chart-3))" : "hsl(var(--primary))"}
+                      />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
+
+          {selectedCategory && (
+            <Card className="border-2 border-primary/30 bg-primary/5">
+              <CardHeader className="flex flex-row items-center justify-between pb-3">
+                <CardTitle className="text-base">
+                  {selectedCategory}
+                  <span className="ml-3 text-muted-foreground font-normal text-sm">
+                    {selectedCategoryTransactions.length} işlem — Toplam: {formatTL(selectedCategoryTransactions.reduce((s, t) => s + t.amountTry, 0))}
+                  </span>
+                </CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedCategory(null)}>Kapat</Button>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Tarih</TableHead>
+                      <TableHead>Mağaza</TableHead>
+                      <TableHead>Şehir</TableHead>
+                      <TableHead className="text-right">Tutar</TableHead>
+                      <TableHead className="text-right">Döviz</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedCategoryTransactions.map((t, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="text-sm whitespace-nowrap">{format(t.date, "dd.MM.yyyy")}</TableCell>
+                        <TableCell className="font-medium text-sm">{t.merchant}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{t.city}</TableCell>
+                        <TableCell className="text-right font-semibold text-sm">{formatTL(t.amountTry)}</TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground">
+                          {t.currency !== "TRY" ? `${t.originalAmount} ${t.currency}` : "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardContent className="pt-6">
               <Table>
@@ -445,7 +515,11 @@ export default function Dashboard({ transactions }: DashboardProps) {
                 </TableHeader>
                 <TableBody>
                   {applySort(categoryData, catSort).map((row, i) => (
-                    <TableRow key={i}>
+                    <TableRow
+                      key={i}
+                      className={`cursor-pointer transition-colors ${selectedCategory === row.name ? "bg-primary/10 font-semibold" : "hover:bg-muted/60"}`}
+                      onClick={() => setSelectedCategory(prev => prev === row.name ? null : row.name)}
+                    >
                       <TableCell>{row.name}</TableCell>
                       <TableCell className="text-right font-medium">{formatTL(row.amount)}</TableCell>
                       <TableCell className="text-right text-muted-foreground">{row.percent.toFixed(1)}%</TableCell>
