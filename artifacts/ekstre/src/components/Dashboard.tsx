@@ -31,6 +31,7 @@ export default function Dashboard({ transactions }: DashboardProps) {
   const [selectedCities, setSelectedCities] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [selectedMerchant, setSelectedMerchant] = useState<string | null>(null);
   
   const allMonths = useMemo(() => Array.from(new Set(transactions.map(t => t.month))).sort(), [transactions]);
   const allCities = useMemo(() => Array.from(new Set(transactions.map(t => t.city))).sort(), [transactions]);
@@ -127,6 +128,13 @@ export default function Dashboard({ transactions }: DashboardProps) {
       .map(([name, stats]) => ({ name, amount: stats.amount, count: stats.count }))
       .sort((a, b) => b.amount - a.amount);
   }, [filteredTransactions]);
+
+  const selectedMerchantTransactions = useMemo(() => {
+    if (!selectedMerchant) return [];
+    return filteredTransactions
+      .filter(t => t.merchant === selectedMerchant)
+      .sort((a, b) => a.date.getTime() - b.date.getTime());
+  }, [selectedMerchant, filteredTransactions]);
 
   const handleDownloadCsv = () => {
     const headers = ["Tarih", "Mağaza", "Tutar (TL)", "Döviz", "Orijinal Tutar", "Şehir", "Kategori", "Dosya"];
@@ -387,24 +395,99 @@ export default function Dashboard({ transactions }: DashboardProps) {
             <CardHeader><CardTitle>En Çok Harcama Yapılan Mağazalar (İlk 20)</CardTitle></CardHeader>
             <CardContent className="h-[500px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={merchantData.slice(0, 20)} layout="vertical" margin={{ left: 150 }}>
+                <BarChart
+                  data={merchantData.slice(0, 20)}
+                  layout="vertical"
+                  margin={{ left: 150 }}
+                  onClick={(data) => {
+                    if (data?.activePayload?.[0]) {
+                      const name = (data.activePayload[0].payload as { name: string }).name;
+                      setSelectedMerchant(prev => prev === name ? null : name);
+                    }
+                  }}
+                  style={{ cursor: "pointer" }}
+                >
                   <XAxis type="number" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis type="category" dataKey="name" fontSize={10} tickLine={false} axisLine={false} width={150} />
                   <Tooltip formatter={(val: number) => formatTL(val)} />
-                  <Bar dataKey="amount" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="amount" radius={[0, 4, 4, 0]}>
+                    {merchantData.slice(0, 20).map((entry) => (
+                      <Cell
+                        key={entry.name}
+                        fill={selectedMerchant === entry.name ? "hsl(var(--chart-3))" : "hsl(var(--primary))"}
+                      />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
+
+          {selectedMerchant && (
+            <Card className="border-2 border-primary/30 bg-primary/5">
+              <CardHeader className="flex flex-row items-center justify-between pb-3">
+                <CardTitle className="text-base">
+                  {selectedMerchant}
+                  <span className="ml-3 text-muted-foreground font-normal text-sm">
+                    {selectedMerchantTransactions.length} işlem — Toplam: {formatTL(selectedMerchantTransactions.reduce((s, t) => s + t.amountTry, 0))}
+                  </span>
+                </CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedMerchant(null)}>Kapat</Button>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Tarih</TableHead>
+                      <TableHead>Kategori</TableHead>
+                      <TableHead>Şehir</TableHead>
+                      <TableHead className="text-right">Tutar</TableHead>
+                      <TableHead className="text-right">Döviz</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedMerchantTransactions.map((t, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="text-sm whitespace-nowrap">{format(t.date, "dd.MM.yyyy")}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{t.category}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{t.city}</TableCell>
+                        <TableCell className="text-right font-semibold text-sm">{formatTL(t.amountTry)}</TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground">
+                          {t.currency !== "TRY" ? `${t.originalAmount} ${t.currency}` : "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
-            <CardContent className="pt-6">
+            <CardHeader>
+              <CardTitle>Tüm Mağazalar</CardTitle>
+              {!selectedMerchant && <p className="text-xs text-muted-foreground mt-1">Bir mağazaya tıklayarak tüm işlemlerini görün</p>}
+            </CardHeader>
+            <CardContent>
               <Table>
                 <TableHeader>
-                  <TableRow><TableHead>Mağaza</TableHead><TableHead className="text-right">İşlem Sayısı</TableHead><TableHead className="text-right">Toplam Tutar</TableHead></TableRow>
+                  <TableRow>
+                    <TableHead>Mağaza</TableHead>
+                    <TableHead className="text-right">İşlem Sayısı</TableHead>
+                    <TableHead className="text-right">Toplam Tutar</TableHead>
+                  </TableRow>
                 </TableHeader>
                 <TableBody>
                   {merchantData.slice(0, 50).map((row, i) => (
-                    <TableRow key={i}><TableCell className="font-medium text-xs">{row.name}</TableCell><TableCell className="text-right">{row.count}</TableCell><TableCell className="text-right">{formatTL(row.amount)}</TableCell></TableRow>
+                    <TableRow
+                      key={i}
+                      className={`cursor-pointer transition-colors ${selectedMerchant === row.name ? "bg-primary/10 font-semibold" : "hover:bg-muted/60"}`}
+                      onClick={() => setSelectedMerchant(prev => prev === row.name ? null : row.name)}
+                    >
+                      <TableCell className="font-medium text-sm">{row.name}</TableCell>
+                      <TableCell className="text-right">{row.count}</TableCell>
+                      <TableCell className="text-right">{formatTL(row.amount)}</TableCell>
+                    </TableRow>
                   ))}
                 </TableBody>
               </Table>
