@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 
 interface DashboardProps {
   transactions: Transaction[];
@@ -26,12 +27,56 @@ const COLORS = [
   "hsl(var(--chart-5))",
 ];
 
+type SortDir = "asc" | "desc";
+interface SortState<K extends string> { key: K; dir: SortDir }
+
+function useSort<K extends string>(defaultKey: K, defaultDir: SortDir = "desc") {
+  const [sort, setSort] = useState<SortState<K>>({ key: defaultKey, dir: defaultDir });
+  const toggle = (key: K) =>
+    setSort(prev => ({ key, dir: prev.key === key && prev.dir === "desc" ? "asc" : "desc" }));
+  return [sort, toggle] as const;
+}
+
+function applySort<T extends Record<string, unknown>>(data: T[], sort: SortState<string>): T[] {
+  return [...data].sort((a, b) => {
+    const av = a[sort.key], bv = b[sort.key];
+    const cmp = av instanceof Date && bv instanceof Date
+      ? av.getTime() - bv.getTime()
+      : typeof av === "number" && typeof bv === "number"
+        ? av - bv
+        : String(av ?? "").localeCompare(String(bv ?? ""), "tr");
+    return sort.dir === "asc" ? cmp : -cmp;
+  });
+}
+
+function SortableHead<K extends string>({ label, sortKey, sort, onSort, className }: {
+  label: string; sortKey: K; sort: SortState<K>; onSort: (k: K) => void; className?: string;
+}) {
+  const active = sort.key === sortKey;
+  return (
+    <TableHead className={`cursor-pointer select-none whitespace-nowrap hover:text-foreground ${className ?? ""}`} onClick={() => onSort(sortKey)}>
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {active && sort.dir === "asc"  && <ChevronUp   className="h-3 w-3 text-primary" />}
+        {active && sort.dir === "desc" && <ChevronDown  className="h-3 w-3 text-primary" />}
+        {!active && <ChevronsUpDown className="h-3 w-3 opacity-25" />}
+      </span>
+    </TableHead>
+  );
+}
+
 export default function Dashboard({ transactions }: DashboardProps) {
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [selectedCities, setSelectedCities] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [selectedMerchant, setSelectedMerchant] = useState<string | null>(null);
+
+  const [dailySort,    toggleDailySort]    = useSort<"date" | "amount">("amount");
+  const [citySort,     toggleCitySort]     = useSort<"name" | "value" | "percent">("value");
+  const [catSort,      toggleCatSort]      = useSort<"name" | "amount" | "percent">("amount");
+  const [merchantSort, toggleMerchantSort] = useSort<"name" | "count" | "amount">("amount");
+  const [rawSort,      toggleRawSort]      = useSort<"date" | "merchant" | "amountTry" | "city" | "category">("date", "desc");
   
   const allMonths = useMemo(() => Array.from(new Set(transactions.map(t => t.month))).sort(), [transactions]);
   const allCities = useMemo(() => Array.from(new Set(transactions.map(t => t.city))).sort(), [transactions]);
@@ -314,11 +359,17 @@ export default function Dashboard({ transactions }: DashboardProps) {
             <CardContent>
               <Table>
                 <TableHeader>
-                  <TableRow><TableHead>Tarih</TableHead><TableHead className="text-right">Tutar</TableHead></TableRow>
+                  <TableRow>
+                    <SortableHead label="Tarih"  sortKey="date"   sort={dailySort} onSort={toggleDailySort} />
+                    <SortableHead label="Tutar"  sortKey="amount" sort={dailySort} onSort={toggleDailySort} className="text-right" />
+                  </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {dailyData.slice(0, 10).map((row, i) => (
-                    <TableRow key={i}><TableCell>{row.date}</TableCell><TableCell className="text-right font-medium">{formatTL(row.amount)}</TableCell></TableRow>
+                  {applySort(dailyData, dailySort).slice(0, 20).map((row, i) => (
+                    <TableRow key={i}>
+                      <TableCell>{row.date}</TableCell>
+                      <TableCell className="text-right font-medium">{formatTL(row.amount)}</TableCell>
+                    </TableRow>
                   ))}
                 </TableBody>
               </Table>
@@ -347,11 +398,19 @@ export default function Dashboard({ transactions }: DashboardProps) {
               <CardContent>
                 <Table>
                   <TableHeader>
-                    <TableRow><TableHead>Şehir</TableHead><TableHead className="text-right">Tutar</TableHead><TableHead className="text-right">%</TableHead></TableRow>
+                    <TableRow>
+                      <SortableHead label="Şehir"  sortKey="name"    sort={citySort} onSort={toggleCitySort} />
+                      <SortableHead label="Tutar"  sortKey="value"   sort={citySort} onSort={toggleCitySort} className="text-right" />
+                      <SortableHead label="%"      sortKey="percent" sort={citySort} onSort={toggleCitySort} className="text-right" />
+                    </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {cityData.map((row, i) => (
-                      <TableRow key={i}><TableCell>{row.name}</TableCell><TableCell className="text-right font-medium">{formatTL(row.value)}</TableCell><TableCell className="text-right text-muted-foreground">{row.percent.toFixed(1)}%</TableCell></TableRow>
+                    {applySort(cityData, citySort).map((row, i) => (
+                      <TableRow key={i}>
+                        <TableCell>{row.name}</TableCell>
+                        <TableCell className="text-right font-medium">{formatTL(row.value)}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{row.percent.toFixed(1)}%</TableCell>
+                      </TableRow>
                     ))}
                   </TableBody>
                 </Table>
@@ -378,11 +437,19 @@ export default function Dashboard({ transactions }: DashboardProps) {
             <CardContent className="pt-6">
               <Table>
                 <TableHeader>
-                  <TableRow><TableHead>Kategori</TableHead><TableHead className="text-right">Tutar</TableHead><TableHead className="text-right">%</TableHead></TableRow>
+                  <TableRow>
+                    <SortableHead label="Kategori" sortKey="name"    sort={catSort} onSort={toggleCatSort} />
+                    <SortableHead label="Tutar"    sortKey="amount"  sort={catSort} onSort={toggleCatSort} className="text-right" />
+                    <SortableHead label="%"        sortKey="percent" sort={catSort} onSort={toggleCatSort} className="text-right" />
+                  </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {categoryData.map((row, i) => (
-                    <TableRow key={i}><TableCell>{row.name}</TableCell><TableCell className="text-right font-medium">{formatTL(row.amount)}</TableCell><TableCell className="text-right text-muted-foreground">{row.percent.toFixed(1)}%</TableCell></TableRow>
+                  {applySort(categoryData, catSort).map((row, i) => (
+                    <TableRow key={i}>
+                      <TableCell>{row.name}</TableCell>
+                      <TableCell className="text-right font-medium">{formatTL(row.amount)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{row.percent.toFixed(1)}%</TableCell>
+                    </TableRow>
                   ))}
                 </TableBody>
               </Table>
@@ -472,13 +539,13 @@ export default function Dashboard({ transactions }: DashboardProps) {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Mağaza</TableHead>
-                    <TableHead className="text-right">İşlem Sayısı</TableHead>
-                    <TableHead className="text-right">Toplam Tutar</TableHead>
+                    <SortableHead label="Mağaza"       sortKey="name"   sort={merchantSort} onSort={toggleMerchantSort} />
+                    <SortableHead label="İşlem Sayısı" sortKey="count"  sort={merchantSort} onSort={toggleMerchantSort} className="text-right" />
+                    <SortableHead label="Toplam Tutar" sortKey="amount" sort={merchantSort} onSort={toggleMerchantSort} className="text-right" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {merchantData.slice(0, 50).map((row, i) => (
+                  {applySort(merchantData, merchantSort).slice(0, 50).map((row, i) => (
                     <TableRow
                       key={i}
                       className={`cursor-pointer transition-colors ${selectedMerchant === row.name ? "bg-primary/10 font-semibold" : "hover:bg-muted/60"}`}
@@ -509,16 +576,16 @@ export default function Dashboard({ transactions }: DashboardProps) {
                 <Table>
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow>
-                      <TableHead>Tarih</TableHead>
-                      <TableHead>Mağaza</TableHead>
-                      <TableHead className="text-right">Tutar</TableHead>
+                      <SortableHead label="Tarih"    sortKey="date"      sort={rawSort} onSort={toggleRawSort} />
+                      <SortableHead label="Mağaza"   sortKey="merchant"  sort={rawSort} onSort={toggleRawSort} />
+                      <SortableHead label="Tutar"    sortKey="amountTry" sort={rawSort} onSort={toggleRawSort} className="text-right" />
                       <TableHead>Döviz</TableHead>
-                      <TableHead>Şehir</TableHead>
-                      <TableHead>Kategori</TableHead>
+                      <SortableHead label="Şehir"    sortKey="city"      sort={rawSort} onSort={toggleRawSort} />
+                      <SortableHead label="Kategori" sortKey="category"  sort={rawSort} onSort={toggleRawSort} />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredTransactions.map((t, i) => (
+                    {applySort(filteredTransactions as unknown as Record<string, unknown>[], rawSort).map((t, i) => (
                       <TableRow key={i}>
                         <TableCell className="whitespace-nowrap text-xs">{format(t.date, "dd.MM.yyyy")}</TableCell>
                         <TableCell className="text-xs max-w-[200px] truncate" title={t.merchant}>{t.merchant}</TableCell>
