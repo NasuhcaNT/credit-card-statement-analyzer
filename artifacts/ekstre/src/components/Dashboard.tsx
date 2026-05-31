@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { format, parseISO, isWithinInterval } from "date-fns";
+import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { Transaction } from "@/lib/parser";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +30,7 @@ export default function Dashboard({ transactions }: DashboardProps) {
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [selectedCities, setSelectedCities] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
   
   const allMonths = useMemo(() => Array.from(new Set(transactions.map(t => t.month))).sort(), [transactions]);
   const allCities = useMemo(() => Array.from(new Set(transactions.map(t => t.city))).sort(), [transactions]);
@@ -61,20 +62,36 @@ export default function Dashboard({ transactions }: DashboardProps) {
       .map(([date, amount]) => ({ date, amount }))
       .sort((a, b) => b.amount - a.amount); // for table
   }, [filteredTransactions]);
-  
-  const dailyChartData = useMemo(() => {
-    const map = new Map<string, { dateObj: Date, amount: number }>();
+
+  const dailyChartDataClean = useMemo(() => {
+    const map = new Map<string, { dateObj: Date; amount: number; isoKey: string }>();
     filteredTransactions.forEach(t => {
-      const dateStr = format(t.date, "dd MMM", { locale: tr });
-      if (!map.has(dateStr)) {
-        map.set(dateStr, { dateObj: t.date, amount: 0 });
+      const isoKey = format(t.date, "yyyy-MM-dd");
+      if (!map.has(isoKey)) {
+        map.set(isoKey, { dateObj: t.date, amount: 0, isoKey });
       }
-      map.get(dateStr)!.amount += t.amountTry;
+      map.get(isoKey)!.amount += t.amountTry;
     });
     return Array.from(map.values())
       .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime())
-      .map(item => ({ date: format(item.dateObj, "dd MMM", { locale: tr }), amount: item.amount }));
+      .map(item => ({
+        date: format(item.dateObj, "dd MMM", { locale: tr }),
+        isoKey: item.isoKey,
+        amount: item.amount,
+      }));
   }, [filteredTransactions]);
+
+  const selectedDayTransactions = useMemo(() => {
+    if (!selectedDay) return [];
+    return filteredTransactions.filter(t => format(t.date, "yyyy-MM-dd") === selectedDay)
+      .sort((a, b) => b.amountTry - a.amountTry);
+  }, [selectedDay, filteredTransactions]);
+
+  const selectedDayLabel = useMemo(() => {
+    if (!selectedDay) return null;
+    const [y, m, d] = selectedDay.split("-").map(Number);
+    return format(new Date(y, m - 1, d), "d MMMM yyyy", { locale: tr });
+  }, [selectedDay]);
 
   // City Data
   const cityData = useMemo(() => {
@@ -212,18 +229,78 @@ export default function Dashboard({ transactions }: DashboardProps) {
 
         <TabsContent value="gunluk" className="space-y-4">
           <Card>
-            <CardHeader><CardTitle>Günlük Harcama Trendi</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle>Günlük Harcama Trendi</CardTitle>
+              {!selectedDay && <p className="text-xs text-muted-foreground mt-1">Bir güne tıklayarak o günün harcamalarını görün</p>}
+            </CardHeader>
             <CardContent className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={dailyChartData}>
+                <BarChart
+                  data={dailyChartDataClean}
+                  onClick={(data) => {
+                    if (data?.activePayload?.[0]) {
+                      const isoKey = (data.activePayload[0].payload as { isoKey: string }).isoKey;
+                      setSelectedDay(prev => prev === isoKey ? null : isoKey);
+                    }
+                  }}
+                  style={{ cursor: "pointer" }}
+                >
                   <XAxis dataKey="date" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `${v.toLocaleString('tr-TR')} ₺`} />
+                  <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v as number).toLocaleString('tr-TR')} ₺`} />
                   <Tooltip formatter={(val: number) => formatTL(val)} />
-                  <Bar dataKey="amount" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
+                    {dailyChartDataClean.map((entry) => (
+                      <Cell
+                        key={entry.isoKey}
+                        fill={selectedDay === entry.isoKey ? "hsl(var(--chart-3))" : "hsl(var(--primary))"}
+                      />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
+
+          {selectedDay && (
+            <Card className="border-2 border-primary/30 bg-primary/5">
+              <CardHeader className="flex flex-row items-center justify-between pb-3">
+                <CardTitle className="text-base">
+                  {selectedDayLabel} — {selectedDayTransactions.length} işlem
+                  <span className="ml-3 text-muted-foreground font-normal text-sm">
+                    Toplam: {formatTL(selectedDayTransactions.reduce((s, t) => s + t.amountTry, 0))}
+                  </span>
+                </CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedDay(null)}>Kapat</Button>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Mağaza</TableHead>
+                      <TableHead>Kategori</TableHead>
+                      <TableHead>Şehir</TableHead>
+                      <TableHead className="text-right">Tutar</TableHead>
+                      <TableHead className="text-right">Döviz</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedDayTransactions.map((t, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="font-medium text-sm">{t.merchant}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{t.category}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{t.city}</TableCell>
+                        <TableCell className="text-right font-semibold text-sm">{formatTL(t.amountTry)}</TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground">
+                          {t.currency !== "TRY" ? `${t.originalAmount} ${t.currency}` : "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader><CardTitle>En Yüksek Harcama Günleri</CardTitle></CardHeader>
             <CardContent>
