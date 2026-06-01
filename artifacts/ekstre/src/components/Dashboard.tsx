@@ -120,6 +120,17 @@ export default function Dashboard({ transactions }: DashboardProps) {
     });
   }, [baseFilteredTransactions, activeGroupId, groups]);
 
+  const groupStats = useMemo(() => {
+    return groups.map(group => {
+      const txs = baseFilteredTransactions.filter(t => {
+        const ds = format(t.date, "yyyy-MM-dd");
+        return ds >= group.startDate && ds <= group.endDate;
+      });
+      const total = txs.reduce((s, t) => s + t.amountTry, 0);
+      return { group, total, count: txs.length };
+    });
+  }, [groups, baseFilteredTransactions]);
+
   const groupComparisonData = useMemo(() => {
     if (groups.length < 2) return null;
     return groups.map(group => {
@@ -438,28 +449,53 @@ export default function Dashboard({ transactions }: DashboardProps) {
       )}
 
       {groups.length > 0 && (
-        <div className="flex flex-wrap gap-2 items-center py-1">
-          <span className="text-sm font-medium text-muted-foreground">Aktif Grup:</span>
-          <button
-            onClick={() => setActiveGroupId(null)}
-            className={`px-3 py-1 rounded-full text-xs font-medium border-2 transition-all ${activeGroupId === null ? "bg-foreground text-background border-foreground" : "border-border hover:border-foreground/50"}`}
-          >
-            Tümü
-          </button>
-          {groups.map(g => (
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2 items-center py-1">
+            <span className="text-sm font-medium text-muted-foreground">Aktif Grup:</span>
             <button
-              key={g.id}
-              onClick={() => setActiveGroupId(prev => prev === g.id ? null : g.id)}
-              style={{
-                borderColor: g.color,
-                backgroundColor: activeGroupId === g.id ? g.color : "transparent",
-                color: activeGroupId === g.id ? "#fff" : g.color,
-              }}
-              className="px-3 py-1 rounded-full text-xs font-semibold border-2 transition-all"
+              onClick={() => setActiveGroupId(null)}
+              className={`px-3 py-1 rounded-full text-xs font-medium border-2 transition-all ${activeGroupId === null ? "bg-foreground text-background border-foreground" : "border-border hover:border-foreground/50"}`}
             >
-              {g.name}
+              Tümü
             </button>
-          ))}
+            {groups.map(g => (
+              <button
+                key={g.id}
+                onClick={() => setActiveGroupId(prev => prev === g.id ? null : g.id)}
+                style={{
+                  borderColor: g.color,
+                  backgroundColor: activeGroupId === g.id ? g.color : "transparent",
+                  color: activeGroupId === g.id ? "#fff" : g.color,
+                }}
+                className="px-3 py-1 rounded-full text-xs font-semibold border-2 transition-all"
+              >
+                {g.name}
+              </button>
+            ))}
+          </div>
+
+          {activeGroupId === null && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {groupStats.map(({ group, total, count }) => (
+                <button
+                  key={group.id}
+                  onClick={() => setActiveGroupId(group.id)}
+                  className="text-left p-3 rounded-xl border-2 hover:shadow-sm transition-all bg-card"
+                  style={{ borderColor: group.color }}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: group.color }} />
+                    <span className="text-sm font-semibold" style={{ color: group.color }}>{group.name}</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mb-1">
+                    {group.startDate} — {group.endDate}
+                  </div>
+                  <div className="text-lg font-bold text-foreground">{formatTL(total)}</div>
+                  <div className="text-xs text-muted-foreground">{count} işlem</div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
