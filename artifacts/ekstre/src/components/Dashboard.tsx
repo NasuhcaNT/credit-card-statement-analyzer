@@ -526,20 +526,17 @@ export default function Dashboard({ transactions }: DashboardProps) {
             </CardHeader>
             <CardContent className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={dailyChartDataClean}
-                  onClick={(data) => {
-                    if (data?.activePayload?.[0]) {
-                      const isoKey = (data.activePayload[0].payload as { isoKey: string }).isoKey;
-                      setSelectedDay(prev => prev === isoKey ? null : isoKey);
-                    }
-                  }}
-                  style={{ cursor: "pointer" }}
-                >
+                <BarChart data={dailyChartDataClean} style={{ cursor: "pointer" }}>
                   <XAxis dataKey="date" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v as number).toLocaleString('tr-TR')} ₺`} />
                   <Tooltip formatter={(val: number) => formatTL(val)} />
-                  <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
+                  <Bar
+                    dataKey="amount"
+                    radius={[4, 4, 0, 0]}
+                    onClick={(data: { isoKey: string }) => {
+                      setSelectedDay(prev => prev === data.isoKey ? null : data.isoKey);
+                    }}
+                  >
                     {dailyChartDataClean.map((entry) => (
                       <Cell
                         key={entry.isoKey}
