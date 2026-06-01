@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { Transaction } from "@/lib/parser";
@@ -83,6 +83,7 @@ export default function Dashboard({ transactions }: DashboardProps) {
   const [selectedCities, setSelectedCities] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [selectedDaySource, setSelectedDaySource] = useState<"chart" | "table" | null>(null);
   const [selectedMerchant, setSelectedMerchant] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
@@ -538,7 +539,9 @@ export default function Dashboard({ transactions }: DashboardProps) {
                     dataKey="amount"
                     radius={[4, 4, 0, 0]}
                     onClick={(data: { isoKey: string }) => {
-                      setSelectedDay(prev => prev === data.isoKey ? null : data.isoKey);
+                      const next = selectedDay === data.isoKey ? null : data.isoKey;
+                      setSelectedDay(next);
+                      setSelectedDaySource(next ? "chart" : null);
                     }}
                   >
                     {dailyChartDataClean.map((entry) => (
@@ -552,6 +555,44 @@ export default function Dashboard({ transactions }: DashboardProps) {
               </ResponsiveContainer>
             </CardContent>
           </Card>
+
+          {selectedDay && selectedDaySource === "chart" && (
+            <Card className="border-2 border-primary/30 bg-primary/5">
+              <CardHeader className="flex flex-row items-center justify-between pb-3">
+                <CardTitle className="text-base">
+                  {selectedDayLabel} — {selectedDayTransactions.length} işlem
+                  <span className="ml-3 text-muted-foreground font-normal text-sm">
+                    Toplam: {formatTL(selectedDayTransactions.reduce((s, t) => s + t.amountTry, 0))}
+                  </span>
+                </CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => { setSelectedDay(null); setSelectedDaySource(null); }}>Kapat</Button>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-muted-foreground border-b">
+                      <th className="text-left pb-1 font-medium">Mağaza</th>
+                      <th className="text-left pb-1 font-medium">Kategori</th>
+                      <th className="text-left pb-1 font-medium">Şehir</th>
+                      <th className="text-right pb-1 font-medium">Tutar</th>
+                      <th className="text-right pb-1 font-medium">Döviz</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedDayTransactions.map((t, j) => (
+                      <tr key={j} className="border-b border-border/40 last:border-0">
+                        <td className="py-1.5 font-medium pr-3">{t.merchant}</td>
+                        <td className="py-1.5 text-muted-foreground pr-3">{t.category}</td>
+                        <td className="py-1.5 text-muted-foreground pr-3">{t.city}</td>
+                        <td className="py-1.5 text-right font-semibold pr-3">{formatTL(t.amountTry)}</td>
+                        <td className="py-1.5 text-right text-xs text-muted-foreground">{t.currency !== "TRY" ? `${t.originalAmount} ${t.currency}` : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>
@@ -568,19 +609,22 @@ export default function Dashboard({ transactions }: DashboardProps) {
                 </TableHeader>
                 <TableBody>
                   {applySort(dailyData, dailySort).slice(0, 20).map((row, i) => (
-                    <>
+                    <React.Fragment key={row.isoKey}>
                       <TableRow
-                        key={`row-${i}`}
                         className={`cursor-pointer transition-colors ${selectedDay === row.isoKey ? "bg-primary/10 font-semibold border-l-2 border-primary" : "hover:bg-muted/60"}`}
-                        onClick={() => setSelectedDay(prev => prev === row.isoKey ? null : row.isoKey)}
+                        onClick={() => {
+                          const next = selectedDay === row.isoKey ? null : row.isoKey;
+                          setSelectedDay(next);
+                          setSelectedDaySource(next ? "table" : null);
+                        }}
                       >
                         <TableCell className="flex items-center gap-2">
-                          <span className={`inline-block w-2 h-2 rounded-full transition-all ${selectedDay === row.isoKey ? "bg-primary" : "bg-transparent"}`} />
+                          <span className={`inline-block w-2 h-2 rounded-full transition-all ${selectedDay === row.isoKey && selectedDaySource === "table" ? "bg-primary" : "bg-transparent"}`} />
                           {row.date}
                         </TableCell>
                         <TableCell className="text-right font-medium">{formatTL(row.amount)}</TableCell>
                       </TableRow>
-                      {selectedDay === row.isoKey && (
+                      {selectedDay === row.isoKey && selectedDaySource === "table" && (
                         <TableRow key={`detail-${i}`} className="bg-muted/30">
                           <TableCell colSpan={2} className="p-0">
                             <div className="px-4 py-3">
@@ -613,7 +657,7 @@ export default function Dashboard({ transactions }: DashboardProps) {
                           </TableCell>
                         </TableRow>
                       )}
-                    </>
+                    </React.Fragment>
                   ))}
                 </TableBody>
               </Table>
