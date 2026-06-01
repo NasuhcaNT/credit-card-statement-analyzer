@@ -181,11 +181,15 @@ export default function Dashboard({ transactions }: DashboardProps) {
   const dailyData = useMemo(() => {
     const map = new Map<string, number>();
     filteredTransactions.forEach(t => {
-      const dateStr = format(t.date, "dd MMM", { locale: tr });
-      map.set(dateStr, (map.get(dateStr) || 0) + t.amountTry);
+      const isoKey = format(t.date, "yyyy-MM-dd");
+      if (!map.has(isoKey)) map.set(isoKey, 0);
+      map.set(isoKey, map.get(isoKey)! + t.amountTry);
     });
     return Array.from(map.entries())
-      .map(([date, amount]) => ({ date, amount }))
+      .map(([isoKey, amount]) => {
+        const [y, m, d] = isoKey.split("-").map(Number);
+        return { isoKey, date: format(new Date(y, m - 1, d), "dd MMM yyyy", { locale: tr }), amount };
+      })
       .sort((a, b) => b.amount - a.amount);
   }, [filteredTransactions]);
 
@@ -590,7 +594,10 @@ export default function Dashboard({ transactions }: DashboardProps) {
           )}
 
           <Card>
-            <CardHeader><CardTitle>En Yüksek Harcama Günleri</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle>En Yüksek Harcama Günleri</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">Bir güne tıklayarak o günün harcamalarını görün</p>
+            </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
@@ -601,7 +608,11 @@ export default function Dashboard({ transactions }: DashboardProps) {
                 </TableHeader>
                 <TableBody>
                   {applySort(dailyData, dailySort).slice(0, 20).map((row, i) => (
-                    <TableRow key={i}>
+                    <TableRow
+                      key={i}
+                      className={`cursor-pointer transition-colors ${selectedDay === row.isoKey ? "bg-primary/10 font-semibold" : "hover:bg-muted/60"}`}
+                      onClick={() => setSelectedDay(prev => prev === row.isoKey ? null : row.isoKey)}
+                    >
                       <TableCell>{row.date}</TableCell>
                       <TableCell className="text-right font-medium">{formatTL(row.amount)}</TableCell>
                     </TableRow>
