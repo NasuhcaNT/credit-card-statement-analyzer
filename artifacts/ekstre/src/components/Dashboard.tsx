@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { ChevronUp, ChevronDown, ChevronsUpDown, Plus, Trash2, Layers } from "lucide-react";
 
 interface DashboardProps {
   transactions: Transaction[];
@@ -26,6 +26,19 @@ const COLORS = [
   "hsl(var(--chart-4))",
   "hsl(var(--chart-5))",
 ];
+
+const GROUP_COLORS = [
+  "#6366f1", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6",
+  "#06b6d4", "#f97316", "#84cc16", "#ec4899", "#14b8a6",
+];
+
+interface DateGroup {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  color: string;
+}
 
 type SortDir = "asc" | "desc";
 interface SortState<K extends string> { key: K; dir: SortDir }
@@ -73,6 +86,11 @@ export default function Dashboard({ transactions }: DashboardProps) {
   const [selectedMerchant, setSelectedMerchant] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
+  const [groups, setGroups] = useState<DateGroup[]>([]);
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+  const [showGroupManager, setShowGroupManager] = useState(false);
+  const [newGroupForm, setNewGroupForm] = useState({ name: "", startDate: "", endDate: "" });
+
   const [dailySort,    toggleDailySort]    = useSort<"date" | "amount">("amount");
   const [citySort,     toggleCitySort]     = useSort<"name" | "value" | "percent">("value");
   const [catSort,      toggleCatSort]      = useSort<"name" | "amount" | "percent">("amount");
@@ -83,7 +101,7 @@ export default function Dashboard({ transactions }: DashboardProps) {
   const allCities = useMemo(() => Array.from(new Set(transactions.map(t => t.city))).sort(), [transactions]);
   const allCategories = useMemo(() => Array.from(new Set(transactions.map(t => t.category))).sort(), [transactions]);
 
-  const filteredTransactions = useMemo(() => {
+  const baseFilteredTransactions = useMemo(() => {
     return transactions.filter(t => {
       if (selectedMonths.length > 0 && !selectedMonths.includes(t.month)) return false;
       if (selectedCities.length > 0 && !selectedCities.includes(t.city)) return false;
@@ -92,13 +110,63 @@ export default function Dashboard({ transactions }: DashboardProps) {
     });
   }, [transactions, selectedMonths, selectedCities, selectedCategories]);
 
-  // KPIs
+  const filteredTransactions = useMemo(() => {
+    if (!activeGroupId) return baseFilteredTransactions;
+    const group = groups.find(g => g.id === activeGroupId);
+    if (!group) return baseFilteredTransactions;
+    return baseFilteredTransactions.filter(t => {
+      const ds = format(t.date, "yyyy-MM-dd");
+      return ds >= group.startDate && ds <= group.endDate;
+    });
+  }, [baseFilteredTransactions, activeGroupId, groups]);
+
+  const groupComparisonData = useMemo(() => {
+    if (groups.length < 2) return null;
+    return groups.map(group => {
+      const txs = baseFilteredTransactions.filter(t => {
+        const ds = format(t.date, "yyyy-MM-dd");
+        return ds >= group.startDate && ds <= group.endDate;
+      });
+      const total = txs.reduce((s, t) => s + t.amountTry, 0);
+      const uniqueDays = new Set(txs.map(t => format(t.date, "yyyy-MM-dd"))).size;
+      const catMap = new Map<string, number>();
+      txs.forEach(t => catMap.set(t.category, (catMap.get(t.category) || 0) + t.amountTry));
+      const cityMap = new Map<string, number>();
+      txs.forEach(t => cityMap.set(t.city, (cityMap.get(t.city) || 0) + t.amountTry));
+      return {
+        group,
+        txs,
+        total,
+        count: txs.length,
+        dailyAvg: uniqueDays > 0 ? total / uniqueDays : 0,
+        categoryBreakdown: Array.from(catMap.entries()).map(([name, amount]) => ({ name, amount })),
+        cityBreakdown: Array.from(cityMap.entries()).map(([name, amount]) => ({ name, amount })),
+      };
+    });
+  }, [groups, baseFilteredTransactions]);
+
+  const comparisonCategoryChartData = useMemo(() => {
+    if (!groupComparisonData) return [];
+    const allCats = Array.from(new Set(groupComparisonData.flatMap(g => g.categoryBreakdown.map(c => c.name))));
+    return allCats.map(cat => {
+      const entry: Record<string, unknown> = { name: cat };
+      groupComparisonData.forEach(g => {
+        const found = g.categoryBreakdown.find(c => c.name === cat);
+        entry[g.group.name] = found?.amount ?? 0;
+      });
+      return entry;
+    }).sort((a, b) => {
+      const sa = groupComparisonData.reduce((s, g) => s + ((a[g.group.name] as number) || 0), 0);
+      const sb = groupComparisonData.reduce((s, g) => s + ((b[g.group.name] as number) || 0), 0);
+      return sb - sa;
+    });
+  }, [groupComparisonData]);
+
   const totalSpend = filteredTransactions.reduce((sum, t) => sum + t.amountTry, 0);
   const uniqueDays = new Set(filteredTransactions.map(t => t.date.toISOString())).size;
   const dailyAverage = uniqueDays > 0 ? totalSpend / uniqueDays : 0;
   const uniqueMerchants = new Set(filteredTransactions.map(t => t.merchant)).size;
 
-  // Daily Chart Data
   const dailyData = useMemo(() => {
     const map = new Map<string, number>();
     filteredTransactions.forEach(t => {
@@ -107,25 +175,19 @@ export default function Dashboard({ transactions }: DashboardProps) {
     });
     return Array.from(map.entries())
       .map(([date, amount]) => ({ date, amount }))
-      .sort((a, b) => b.amount - a.amount); // for table
+      .sort((a, b) => b.amount - a.amount);
   }, [filteredTransactions]);
 
   const dailyChartDataClean = useMemo(() => {
     const map = new Map<string, { dateObj: Date; amount: number; isoKey: string }>();
     filteredTransactions.forEach(t => {
       const isoKey = format(t.date, "yyyy-MM-dd");
-      if (!map.has(isoKey)) {
-        map.set(isoKey, { dateObj: t.date, amount: 0, isoKey });
-      }
+      if (!map.has(isoKey)) map.set(isoKey, { dateObj: t.date, amount: 0, isoKey });
       map.get(isoKey)!.amount += t.amountTry;
     });
     return Array.from(map.values())
       .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime())
-      .map(item => ({
-        date: format(item.dateObj, "dd MMM", { locale: tr }),
-        isoKey: item.isoKey,
-        amount: item.amount,
-      }));
+      .map(item => ({ date: format(item.dateObj, "dd MMM", { locale: tr }), isoKey: item.isoKey, amount: item.amount }));
   }, [filteredTransactions]);
 
   const selectedDayTransactions = useMemo(() => {
@@ -140,29 +202,22 @@ export default function Dashboard({ transactions }: DashboardProps) {
     return format(new Date(y, m - 1, d), "d MMMM yyyy", { locale: tr });
   }, [selectedDay]);
 
-  // City Data
   const cityData = useMemo(() => {
     const map = new Map<string, number>();
-    filteredTransactions.forEach(t => {
-      map.set(t.city, (map.get(t.city) || 0) + t.amountTry);
-    });
+    filteredTransactions.forEach(t => { map.set(t.city, (map.get(t.city) || 0) + t.amountTry); });
     return Array.from(map.entries())
       .map(([name, value]) => ({ name, value, percent: value / totalSpend * 100 }))
       .sort((a, b) => b.value - a.value);
   }, [filteredTransactions, totalSpend]);
 
-  // Category Data
   const categoryData = useMemo(() => {
     const map = new Map<string, number>();
-    filteredTransactions.forEach(t => {
-      map.set(t.category, (map.get(t.category) || 0) + t.amountTry);
-    });
+    filteredTransactions.forEach(t => { map.set(t.category, (map.get(t.category) || 0) + t.amountTry); });
     return Array.from(map.entries())
       .map(([name, amount]) => ({ name, amount, percent: amount / totalSpend * 100 }))
       .sort((a, b) => b.amount - a.amount);
   }, [filteredTransactions, totalSpend]);
 
-  // Merchant Data
   const merchantData = useMemo(() => {
     const map = new Map<string, { amount: number, count: number }>();
     filteredTransactions.forEach(t => {
@@ -177,15 +232,13 @@ export default function Dashboard({ transactions }: DashboardProps) {
 
   const selectedMerchantTransactions = useMemo(() => {
     if (!selectedMerchant) return [];
-    return filteredTransactions
-      .filter(t => t.merchant === selectedMerchant)
+    return filteredTransactions.filter(t => t.merchant === selectedMerchant)
       .sort((a, b) => a.date.getTime() - b.date.getTime());
   }, [selectedMerchant, filteredTransactions]);
 
   const selectedCategoryTransactions = useMemo(() => {
     if (!selectedCategory) return [];
-    return filteredTransactions
-      .filter(t => t.category === selectedCategory)
+    return filteredTransactions.filter(t => t.category === selectedCategory)
       .sort((a, b) => b.amountTry - a.amountTry);
   }, [selectedCategory, filteredTransactions]);
 
@@ -217,6 +270,26 @@ export default function Dashboard({ transactions }: DashboardProps) {
     else setList([...list, val]);
   };
 
+  const addGroup = () => {
+    if (!newGroupForm.startDate || !newGroupForm.endDate) return;
+    const id = Math.random().toString(36).slice(2);
+    const color = GROUP_COLORS[groups.length % GROUP_COLORS.length];
+    const name = newGroupForm.name.trim() || `Grup ${groups.length + 1}`;
+    setGroups(prev => [...prev, { id, name, startDate: newGroupForm.startDate, endDate: newGroupForm.endDate, color }]);
+    setNewGroupForm({ name: "", startDate: "", endDate: "" });
+  };
+
+  const removeGroup = (id: string) => {
+    setGroups(prev => prev.filter(g => g.id !== id));
+    if (activeGroupId === id) setActiveGroupId(null);
+  };
+
+  const updateGroupName = (id: string, name: string) => {
+    setGroups(prev => prev.map(g => g.id === id ? { ...g, name } : g));
+  };
+
+  const activeGroup = activeGroupId ? groups.find(g => g.id === activeGroupId) : null;
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex justify-between items-center mb-6">
@@ -224,9 +297,11 @@ export default function Dashboard({ transactions }: DashboardProps) {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
+        <Card style={activeGroup ? { borderColor: activeGroup.color, borderWidth: 2 } : {}}>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground font-medium">Toplam Harcama</CardTitle>
+            <CardTitle className="text-sm text-muted-foreground font-medium">Toplam Harcama
+              {activeGroup && <span className="ml-2 text-xs font-normal" style={{ color: activeGroup.color }}>({activeGroup.name})</span>}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-foreground">{formatTL(totalSpend)}</div>
@@ -273,19 +348,133 @@ export default function Dashboard({ transactions }: DashboardProps) {
           
           <div className="w-px h-6 bg-border mx-2"></div>
           
+          <Button
+            variant={showGroupManager ? "default" : "outline"}
+            size="sm"
+            className="h-7 px-3 text-xs gap-1"
+            onClick={() => setShowGroupManager(v => !v)}
+          >
+            <Layers className="h-3 w-3" />
+            Gruplama {groups.length > 0 && `(${groups.length})`}
+          </Button>
+
           <Button variant="ghost" size="sm" onClick={() => { setSelectedMonths([]); setSelectedCities([]); setSelectedCategories([]); }}>
             Filtreleri Sıfırla
           </Button>
         </CardContent>
       </Card>
 
+      {showGroupManager && (
+        <Card className="border-2 border-dashed">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Layers className="h-4 w-4" />
+              Tarih Aralığı Grupları
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">Her grup için bir tarih aralığı belirleyin. Gruplar arası karşılaştırma için en az 2 grup oluşturun.</p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {groups.map((g, i) => (
+              <div key={g.id} className="flex items-center gap-2 p-2 rounded-lg bg-muted/40">
+                <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: g.color }} />
+                <input
+                  className="flex-1 min-w-0 bg-transparent text-sm font-medium border-b border-transparent hover:border-border focus:border-primary outline-none px-1"
+                  value={g.name}
+                  onChange={e => updateGroupName(g.id, e.target.value)}
+                  placeholder={`Grup ${i + 1}`}
+                />
+                <input
+                  type="date"
+                  className="text-xs border rounded px-2 py-1 bg-background"
+                  value={g.startDate}
+                  onChange={e => setGroups(prev => prev.map(x => x.id === g.id ? { ...x, startDate: e.target.value } : x))}
+                />
+                <span className="text-xs text-muted-foreground">—</span>
+                <input
+                  type="date"
+                  className="text-xs border rounded px-2 py-1 bg-background"
+                  value={g.endDate}
+                  onChange={e => setGroups(prev => prev.map(x => x.id === g.id ? { ...x, endDate: e.target.value } : x))}
+                />
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => removeGroup(g.id)}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+
+            <div className="flex items-center gap-2 p-2 rounded-lg border border-dashed">
+              <div className="w-4 h-4 rounded-full flex-shrink-0 opacity-40" style={{ backgroundColor: GROUP_COLORS[groups.length % GROUP_COLORS.length] }} />
+              <input
+                className="flex-1 min-w-0 text-sm bg-background border rounded px-2 py-1"
+                placeholder={`Grup adı (ör. Ocak 2024)`}
+                value={newGroupForm.name}
+                onChange={e => setNewGroupForm(v => ({ ...v, name: e.target.value }))}
+              />
+              <input
+                type="date"
+                className="text-xs border rounded px-2 py-1 bg-background"
+                value={newGroupForm.startDate}
+                onChange={e => setNewGroupForm(v => ({ ...v, startDate: e.target.value }))}
+              />
+              <span className="text-xs text-muted-foreground">—</span>
+              <input
+                type="date"
+                className="text-xs border rounded px-2 py-1 bg-background"
+                value={newGroupForm.endDate}
+                onChange={e => setNewGroupForm(v => ({ ...v, endDate: e.target.value }))}
+              />
+              <Button
+                size="sm"
+                className="h-7 px-3 gap-1"
+                disabled={!newGroupForm.startDate || !newGroupForm.endDate}
+                onClick={addGroup}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Ekle
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {groups.length > 0 && (
+        <div className="flex flex-wrap gap-2 items-center py-1">
+          <span className="text-sm font-medium text-muted-foreground">Aktif Grup:</span>
+          <button
+            onClick={() => setActiveGroupId(null)}
+            className={`px-3 py-1 rounded-full text-xs font-medium border-2 transition-all ${activeGroupId === null ? "bg-foreground text-background border-foreground" : "border-border hover:border-foreground/50"}`}
+          >
+            Tümü
+          </button>
+          {groups.map(g => (
+            <button
+              key={g.id}
+              onClick={() => setActiveGroupId(prev => prev === g.id ? null : g.id)}
+              style={{
+                borderColor: g.color,
+                backgroundColor: activeGroupId === g.id ? g.color : "transparent",
+                color: activeGroupId === g.id ? "#fff" : g.color,
+              }}
+              className="px-3 py-1 rounded-full text-xs font-semibold border-2 transition-all"
+            >
+              {g.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       <Tabs defaultValue="gunluk" className="w-full">
-        <TabsList className="w-full justify-start border-b rounded-none bg-transparent p-0 mb-6 h-auto">
+        <TabsList className="w-full justify-start border-b rounded-none bg-transparent p-0 mb-6 h-auto flex-wrap">
           <TabsTrigger value="gunluk" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2">Günlük Analiz</TabsTrigger>
           <TabsTrigger value="sehir" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2">Şehir Analizi</TabsTrigger>
           <TabsTrigger value="kategori" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2">Kategori Analizi</TabsTrigger>
           <TabsTrigger value="magaza" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2">Mağaza Analizi</TabsTrigger>
           <TabsTrigger value="veri" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2">Ham Veri</TabsTrigger>
+          {groups.length >= 2 && (
+            <TabsTrigger value="karsilastirma" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2 font-semibold">
+              Grup Karşılaştırması
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="gunluk" className="space-y-4">
@@ -313,7 +502,7 @@ export default function Dashboard({ transactions }: DashboardProps) {
                     {dailyChartDataClean.map((entry) => (
                       <Cell
                         key={entry.isoKey}
-                        fill={selectedDay === entry.isoKey ? "hsl(var(--chart-3))" : "hsl(var(--primary))"}
+                        fill={selectedDay === entry.isoKey ? "hsl(var(--chart-3))" : activeGroup ? activeGroup.color : "hsl(var(--primary))"}
                       />
                     ))}
                   </Bar>
@@ -454,7 +643,7 @@ export default function Dashboard({ transactions }: DashboardProps) {
                     {categoryData.map((entry) => (
                       <Cell
                         key={entry.name}
-                        fill={selectedCategory === entry.name ? "hsl(var(--chart-3))" : "hsl(var(--primary))"}
+                        fill={selectedCategory === entry.name ? "hsl(var(--chart-3))" : activeGroup ? activeGroup.color : "hsl(var(--primary))"}
                       />
                     ))}
                   </Bar>
@@ -555,7 +744,7 @@ export default function Dashboard({ transactions }: DashboardProps) {
                     {merchantData.slice(0, 20).map((entry) => (
                       <Cell
                         key={entry.name}
-                        fill={selectedMerchant === entry.name ? "hsl(var(--chart-3))" : "hsl(var(--primary))"}
+                        fill={selectedMerchant === entry.name ? "hsl(var(--chart-3))" : activeGroup ? activeGroup.color : "hsl(var(--primary))"}
                       />
                     ))}
                   </Bar>
@@ -677,6 +866,78 @@ export default function Dashboard({ transactions }: DashboardProps) {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {groups.length >= 2 && groupComparisonData && (
+          <TabsContent value="karsilastirma" className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {groupComparisonData.map(({ group, total, count, dailyAvg }) => (
+                <Card key={group.id} style={{ borderColor: group.color, borderWidth: 2 }}>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: group.color }} />
+                      <CardTitle className="text-sm font-semibold" style={{ color: group.color }}>{group.name}</CardTitle>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{group.startDate} — {group.endDate}</p>
+                  </CardHeader>
+                  <CardContent className="space-y-1">
+                    <div className="text-2xl font-bold">{formatTL(total)}</div>
+                    <div className="text-xs text-muted-foreground">{count} işlem · Günlük ort. {formatTL(dailyAvg)}</div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            <Card>
+              <CardHeader><CardTitle>Kategorilere Göre Karşılaştırma</CardTitle></CardHeader>
+              <CardContent className="h-[450px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={comparisonCategoryChartData} layout="vertical" margin={{ left: 120 }}>
+                    <XAxis type="number" fontSize={12} tickLine={false} axisLine={false} />
+                    <YAxis type="category" dataKey="name" fontSize={11} tickLine={false} axisLine={false} width={120} />
+                    <Tooltip formatter={(val: number) => formatTL(val)} />
+                    <Legend />
+                    {groupComparisonData.map(({ group }) => (
+                      <Bar key={group.id} dataKey={group.name} fill={group.color} radius={[0, 4, 4, 0]} />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader><CardTitle>Grup Özeti Tablosu</CardTitle></CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Kategori</TableHead>
+                      {groupComparisonData.map(({ group }) => (
+                        <TableHead key={group.id} className="text-right">
+                          <span className="inline-flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: group.color }} />
+                            {group.name}
+                          </span>
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {comparisonCategoryChartData.map((row, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="font-medium text-sm">{String(row.name)}</TableCell>
+                        {groupComparisonData.map(({ group }) => (
+                          <TableCell key={group.id} className="text-right text-sm">
+                            {(row[group.name] as number) > 0 ? formatTL(row[group.name] as number) : <span className="text-muted-foreground">—</span>}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
 
       <Accordion type="single" collapsible className="w-full mt-12 bg-card border rounded-lg px-4">
