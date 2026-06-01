@@ -198,8 +198,13 @@ export default function Dashboard({ transactions }: DashboardProps) {
     });
     return Array.from(map.values())
       .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime())
-      .map(item => ({ date: format(item.dateObj, "dd MMM", { locale: tr }), isoKey: item.isoKey, amount: item.amount }));
-  }, [filteredTransactions]);
+      .map(item => {
+        const groupColor = !activeGroupId && groups.length > 0
+          ? (groups.find(g => item.isoKey >= g.startDate && item.isoKey <= g.endDate)?.color ?? null)
+          : null;
+        return { date: format(item.dateObj, "dd MMM", { locale: tr }), isoKey: item.isoKey, amount: item.amount, groupColor };
+      });
+  }, [filteredTransactions, activeGroupId, groups]);
 
   const selectedDayTransactions = useMemo(() => {
     if (!selectedDay) return [];
@@ -538,7 +543,7 @@ export default function Dashboard({ transactions }: DashboardProps) {
                     {dailyChartDataClean.map((entry) => (
                       <Cell
                         key={entry.isoKey}
-                        fill={selectedDay === entry.isoKey ? "hsl(var(--chart-3))" : activeGroup ? activeGroup.color : "hsl(var(--primary))"}
+                        fill={selectedDay === entry.isoKey ? "hsl(var(--chart-3))" : entry.groupColor ?? (activeGroup ? activeGroup.color : "hsl(var(--primary))")}
                       />
                     ))}
                   </Bar>
