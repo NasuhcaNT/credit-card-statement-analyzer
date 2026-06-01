@@ -553,46 +553,6 @@ export default function Dashboard({ transactions }: DashboardProps) {
             </CardContent>
           </Card>
 
-          {selectedDay && (
-            <Card className="border-2 border-primary/30 bg-primary/5">
-              <CardHeader className="flex flex-row items-center justify-between pb-3">
-                <CardTitle className="text-base">
-                  {selectedDayLabel} — {selectedDayTransactions.length} işlem
-                  <span className="ml-3 text-muted-foreground font-normal text-sm">
-                    Toplam: {formatTL(selectedDayTransactions.reduce((s, t) => s + t.amountTry, 0))}
-                  </span>
-                </CardTitle>
-                <Button variant="ghost" size="sm" onClick={() => setSelectedDay(null)}>Kapat</Button>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Mağaza</TableHead>
-                      <TableHead>Kategori</TableHead>
-                      <TableHead>Şehir</TableHead>
-                      <TableHead className="text-right">Tutar</TableHead>
-                      <TableHead className="text-right">Döviz</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {selectedDayTransactions.map((t, i) => (
-                      <TableRow key={i}>
-                        <TableCell className="font-medium text-sm">{t.merchant}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{t.category}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{t.city}</TableCell>
-                        <TableCell className="text-right font-semibold text-sm">{formatTL(t.amountTry)}</TableCell>
-                        <TableCell className="text-right text-xs text-muted-foreground">
-                          {t.currency !== "TRY" ? `${t.originalAmount} ${t.currency}` : "—"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
-
           <Card>
             <CardHeader>
               <CardTitle>En Yüksek Harcama Günleri</CardTitle>
@@ -608,14 +568,52 @@ export default function Dashboard({ transactions }: DashboardProps) {
                 </TableHeader>
                 <TableBody>
                   {applySort(dailyData, dailySort).slice(0, 20).map((row, i) => (
-                    <TableRow
-                      key={i}
-                      className={`cursor-pointer transition-colors ${selectedDay === row.isoKey ? "bg-primary/10 font-semibold" : "hover:bg-muted/60"}`}
-                      onClick={() => setSelectedDay(prev => prev === row.isoKey ? null : row.isoKey)}
-                    >
-                      <TableCell>{row.date}</TableCell>
-                      <TableCell className="text-right font-medium">{formatTL(row.amount)}</TableCell>
-                    </TableRow>
+                    <>
+                      <TableRow
+                        key={`row-${i}`}
+                        className={`cursor-pointer transition-colors ${selectedDay === row.isoKey ? "bg-primary/10 font-semibold border-l-2 border-primary" : "hover:bg-muted/60"}`}
+                        onClick={() => setSelectedDay(prev => prev === row.isoKey ? null : row.isoKey)}
+                      >
+                        <TableCell className="flex items-center gap-2">
+                          <span className={`inline-block w-2 h-2 rounded-full transition-all ${selectedDay === row.isoKey ? "bg-primary" : "bg-transparent"}`} />
+                          {row.date}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">{formatTL(row.amount)}</TableCell>
+                      </TableRow>
+                      {selectedDay === row.isoKey && (
+                        <TableRow key={`detail-${i}`} className="bg-muted/30">
+                          <TableCell colSpan={2} className="p-0">
+                            <div className="px-4 py-3">
+                              <div className="text-xs font-semibold text-muted-foreground mb-2 flex items-center justify-between">
+                                <span>{selectedDayLabel} — {selectedDayTransactions.length} işlem · Toplam: {formatTL(selectedDayTransactions.reduce((s, t) => s + t.amountTry, 0))}</span>
+                              </div>
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="text-xs text-muted-foreground border-b">
+                                    <th className="text-left pb-1 font-medium">Mağaza</th>
+                                    <th className="text-left pb-1 font-medium">Kategori</th>
+                                    <th className="text-left pb-1 font-medium">Şehir</th>
+                                    <th className="text-right pb-1 font-medium">Tutar</th>
+                                    <th className="text-right pb-1 font-medium">Döviz</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {selectedDayTransactions.map((t, j) => (
+                                    <tr key={j} className="border-b border-border/40 last:border-0">
+                                      <td className="py-1.5 font-medium pr-3">{t.merchant}</td>
+                                      <td className="py-1.5 text-muted-foreground pr-3">{t.category}</td>
+                                      <td className="py-1.5 text-muted-foreground pr-3">{t.city}</td>
+                                      <td className="py-1.5 text-right font-semibold pr-3">{formatTL(t.amountTry)}</td>
+                                      <td className="py-1.5 text-right text-xs text-muted-foreground">{t.currency !== "TRY" ? `${t.originalAmount} ${t.currency}` : "—"}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </>
                   ))}
                 </TableBody>
               </Table>
