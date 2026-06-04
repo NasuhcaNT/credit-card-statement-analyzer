@@ -86,6 +86,7 @@ export default function Dashboard({ transactions }: DashboardProps) {
   const [selectedDaySource, setSelectedDaySource] = useState<"chart" | "table" | null>(null);
   const [selectedMerchant, setSelectedMerchant] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedCity, setSelectedCity] = useState<string | null>(null);
 
   const [groups, setGroups] = useState<DateGroup[]>([]);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
@@ -672,8 +673,26 @@ export default function Dashboard({ transactions }: DashboardProps) {
               <CardContent className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={cityData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label>
-                      {cityData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                    <Pie
+                      data={cityData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={100}
+                      label
+                      onClick={(entry) => setSelectedCity(prev => prev === entry.name ? null : entry.name)}
+                      style={{ cursor: "pointer" }}
+                    >
+                      {cityData.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={COLORS[index % COLORS.length]}
+                          opacity={selectedCity && selectedCity !== entry.name ? 0.35 : 1}
+                          stroke={selectedCity === entry.name ? "#fff" : "none"}
+                          strokeWidth={2}
+                        />
+                      ))}
                     </Pie>
                     <Tooltip formatter={(val: number) => formatTL(val)} />
                     <Legend />
@@ -682,7 +701,10 @@ export default function Dashboard({ transactions }: DashboardProps) {
               </CardContent>
             </Card>
             <Card>
-              <CardHeader><CardTitle>Şehir Detayları</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle>Şehir Özeti</CardTitle>
+                {!selectedCity && <p className="text-xs text-muted-foreground mt-1">Bir şehre tıklayarak o şehrin harcamalarını görün</p>}
+              </CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
@@ -694,8 +716,17 @@ export default function Dashboard({ transactions }: DashboardProps) {
                   </TableHeader>
                   <TableBody>
                     {applySort(cityData, citySort).map((row, i) => (
-                      <TableRow key={i}>
-                        <TableCell>{row.name}</TableCell>
+                      <TableRow
+                        key={i}
+                        className={`cursor-pointer transition-colors ${selectedCity === row.name ? "bg-primary/10 font-semibold" : "hover:bg-muted/50"}`}
+                        onClick={() => setSelectedCity(prev => prev === row.name ? null : row.name)}
+                      >
+                        <TableCell>
+                          <span className="flex items-center gap-2">
+                            {selectedCity === row.name && <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />}
+                            {row.name}
+                          </span>
+                        </TableCell>
                         <TableCell className="text-right font-medium">{formatTL(row.value)}</TableCell>
                         <TableCell className="text-right text-muted-foreground">{row.percent.toFixed(1)}%</TableCell>
                       </TableRow>
@@ -705,6 +736,93 @@ export default function Dashboard({ transactions }: DashboardProps) {
               </CardContent>
             </Card>
           </div>
+
+          {/* Seçili şehrin işlem detayları */}
+          {selectedCity && (() => {
+            const cityTxs = filteredTransactions
+              .filter(t => t.city === selectedCity)
+              .sort((a, b) => b.amountTry - a.amountTry);
+
+            // Kategori özeti
+            const catMap = new Map<string, number>();
+            cityTxs.forEach(t => catMap.set(t.category, (catMap.get(t.category) || 0) + t.amountTry));
+            const catSummary = Array.from(catMap.entries())
+              .map(([name, amount]) => ({ name, amount }))
+              .sort((a, b) => b.amount - a.amount);
+
+            const cityTotal = cityTxs.reduce((s, t) => s + t.amountTry, 0);
+
+            return (
+              <div className="space-y-4">
+                {/* Başlık + kapat */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold">{selectedCity} — Harcama Detayı</h3>
+                    <p className="text-sm text-muted-foreground">{cityTxs.length} işlem · Toplam {formatTL(cityTotal)}</p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedCity(null)}
+                    className="text-xs text-muted-foreground hover:text-foreground underline"
+                  >
+                    Kapat
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Kategori dağılımı */}
+                  <Card className="md:col-span-1">
+                    <CardHeader><CardTitle className="text-sm">Kategoriler</CardTitle></CardHeader>
+                    <CardContent>
+                      <Table>
+                        <TableBody>
+                          {catSummary.map((cat, i) => (
+                            <TableRow key={i}>
+                              <TableCell className="py-1.5 text-sm">{cat.name}</TableCell>
+                              <TableCell className="py-1.5 text-right text-sm font-medium">{formatTL(cat.amount)}</TableCell>
+                              <TableCell className="py-1.5 text-right text-xs text-muted-foreground">
+                                {(cat.amount / cityTotal * 100).toFixed(1)}%
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+
+                  {/* İşlem listesi */}
+                  <Card className="md:col-span-2">
+                    <CardHeader><CardTitle className="text-sm">İşlemler</CardTitle></CardHeader>
+                    <CardContent className="p-0">
+                      <ScrollArea className="h-[360px]">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="text-xs">Tarih</TableHead>
+                              <TableHead className="text-xs">Mağaza</TableHead>
+                              <TableHead className="text-xs">Kategori</TableHead>
+                              <TableHead className="text-xs text-right">Tutar</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {cityTxs.map((t, i) => (
+                              <TableRow key={i}>
+                                <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                                  {format(t.date, "dd MMM", { locale: tr })}
+                                </TableCell>
+                                <TableCell className="text-xs max-w-[180px] truncate">{t.merchant}</TableCell>
+                                <TableCell className="text-xs text-muted-foreground">{t.category}</TableCell>
+                                <TableCell className="text-xs text-right font-medium whitespace-nowrap">{formatTL(t.amountTry)}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </ScrollArea>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            );
+          })()}
         </TabsContent>
 
         <TabsContent value="kategori" className="space-y-4">

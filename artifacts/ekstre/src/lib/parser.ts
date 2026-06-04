@@ -12,9 +12,9 @@ export interface Transaction {
   sourceFile: string;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GARANTİ BONUS PARSER (mevcut)
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
+// GARANTİ BONUS PARSER
+// =============================================================================
 
 const MONTHS_TR: Record<string, number> = {
   "Ocak": 1, "Şubat": 2, "Subat": 2, "Mart": 3, "Nisan": 4,
@@ -40,20 +40,20 @@ const NOISE_KEYWORDS = [
 const CITIES: Record<string, string[]> = {
   "İstanbul": ["ISTANBUL", "İSTANBUL", "FATİH", "BEYOĞLU", "ÇAPA", "MERTER", "TOPKAPI", "GALATA", "GALATAPORT", "FINDIKZADE", "YEŞİLKÖY"],
   "Nevşehir": ["NEVŞEHİR", "NEVSEHIR", "GÖREME", "GOREME", "UÇHİSAR", "UCHISAR", "AVANOS", "GÜLŞEHİR", "GULSEHIR"],
-  "Tallinn": ["TALLINN", "ULEMISTE", "ÜLEMISTE", "KOTZEBUE", "MUSTAMAE", "VIIMSI", "REVAL", "SELVER", "LIDO", "IKEA TALLINN"],
+  "Tallinn":  ["TALLINN", "ULEMISTE", "ÜLEMISTE", "KOTZEBUE", "MUSTAMAE", "VIIMSI", "REVAL", "SELVER", "LIDO", "IKEA TALLINN"],
   "Helsinki": ["HELSINKI", "LONNROTINKATU", "LÖNNROTINKATU", "ALEKSINKULMA", "CITYCENTER", "VIKINGLINE.FI", "VIKING LINE", "STOCKMANN"]
 };
 
 const CATEGORIES: Record<string, string[]> = {
-  "Market": ["MIGROS", "BİM", "BIM", "MARKET", "SELVER", "K-MARKET", "A1000", "MERNUR", "GIDA"],
-  "Restoran/Kafe": ["CAFE", "KAFE", "RESTAURANT", "RESTORAN", "BURGER", "KFC", "HAPPYMOONS", "ESPRESSOLAB", "KAHVE", "LIDO", "KEBAB", "MIDPOINT", "PEATUS"],
-  "Konaklama": ["HOTEL", "BOOKING", "KONAK", "OTEL"],
-  "Ulaşım": ["BELBIM", "MARMARAY", "VIKING", "AVIS", "BELEDİYESİ", "BELEDIYESI", "CIRCLE K"],
-  "Giyim/Alışveriş": ["KOTON", "MARIMEKKO", "STOCKMANN", "OUTLET", "GRATİS", "GRATIS"],
-  "Akaryakıt": ["SHELL", "PETRO", "CIRCLE K"],
-  "Müze/Gezi": ["MÜZE", "MUZE", "ÖRENYERİ", "ORENYERI", "KİLİSE", "KILISE"],
-  "Sağlık": ["ECZANE", "DİŞ", "DIS"],
-  "Dijital/Abonelik": ["APPLE.COM", "MOBIMATTER", "PAY*"]
+  "Market":            ["MIGROS", "BİM", "BIM", "MARKET", "SELVER", "K-MARKET", "A1000", "MERNUR", "GIDA"],
+  "Restoran/Kafe":     ["CAFE", "KAFE", "RESTAURANT", "RESTORAN", "BURGER", "KFC", "HAPPYMOONS", "ESPRESSOLAB", "KAHVE", "LIDO", "KEBAB", "MIDPOINT", "PEATUS"],
+  "Konaklama":         ["HOTEL", "BOOKING", "KONAK", "OTEL"],
+  "Ulaşım":            ["BELBIM", "MARMARAY", "VIKING", "AVIS", "BELEDİYESİ", "BELEDIYESI", "CIRCLE K"],
+  "Giyim/Alışveriş":  ["KOTON", "MARIMEKKO", "STOCKMANN", "OUTLET", "GRATİS", "GRATIS"],
+  "Akaryakıt":         ["SHELL", "PETRO", "CIRCLE K"],
+  "Müze/Gezi":         ["MÜZE", "MUZE", "ÖRENYERİ", "ORENYERI", "KİLİSE", "KILISE"],
+  "Sağlık":            ["ECZANE", "DİŞ", "DIS"],
+  "Dijital/Abonelik":  ["APPLE.COM", "MOBIMATTER", "PAY*"]
 };
 
 function inferCity(merchant: string): string {
@@ -85,21 +85,17 @@ function parseGarantiStatement(text: string, filename: string): Transaction[] {
     const line = rawLine.trim().replace(/\s+/g, ' ');
     if (!line) continue;
 
-    if (CATEGORY_HEADERS.includes(line)) {
-      currentCategory = line;
-      continue;
-    }
+    if (CATEGORY_HEADERS.includes(line)) { currentCategory = line; continue; }
 
     const dateMatch = line.match(/^(\d{1,2})\s+([A-Za-zÇĞİÖŞÜçğıöşü]+)\s+(\d{4})\s+(.+)$/);
     if (!dateMatch) continue;
-
     if (NOISE_KEYWORDS.some(kw => line.toLowerCase().includes(kw.toLowerCase()))) continue;
 
     const [_, dayStr, monthStr, yearStr, rest] = dateMatch;
     const monthNum = MONTHS_TR[monthStr];
     if (!monthNum) continue;
 
-    const date = new Date(parseInt(yearStr), monthNum - 1, parseInt(dayStr));
+    const date    = new Date(parseInt(yearStr), monthNum - 1, parseInt(dayStr));
     const monthId = `${yearStr}-${monthNum.toString().padStart(2, '0')}`;
 
     const amountMatch = rest.match(/(-?\d{1,3}(?:\.\d{3})*,\d{2})(\+)?\s*$/);
@@ -131,134 +127,182 @@ function parseGarantiStatement(text: string, filename: string): Transaction[] {
     if (!merchant) continue;
 
     transactions.push({
-      date,
-      month: monthId,
-      merchant,
-      amountTry,
-      currency,
-      originalAmount,
+      date, month: monthId, merchant, amountTry, currency, originalAmount,
       city: inferCity(merchant),
       category: inferCategory(merchant, currentCategory),
       statementCategory: currentCategory,
-      rawLine: line,
-      sourceFile: filename
+      rawLine: line, sourceFile: filename
     });
   }
 
   return transactions;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TÜRKİYE FİNANS / HAPPY KART PARSER
-// Format: GG/AA/YYYY   MERCHANT ADI ŞEHİR TR   [bonus?]   TUTAR
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
+// TÜRKİYE FİNANS / HAPPY KART PARSER (daha toleranslı sürüm)
+// =============================================================================
 
 const TF_NOISE = [
-  "DEVREDEN BAKİYE", "MBL-ÖDEME", "TEŞEKKÜR", "TOPLAM TL",
-  "HAPPY KART HESAP", "Hesap özetiniz", "Bir sonraki", "Sayfa",
-  "MESAJINIZ VAR", "TARİHİ İTİBARİYLE", "REFERANS ORANI",
+  "DEVREDEN BAKİYE", "MBL-ÖDEME", "ÖDEME TEŞEKKÜR", "TOPLAM TL",
+  "HAPPY KART HESAP", "HAPPY GOLD KART", "Hesap özetiniz", "Bir sonraki",
+  "MESAJINIZ VAR", "TARİHİ İTİBARİYLE", "REFERANS ORANI", "DÖNEM BORCU",
   "Önceki Bakiye", "Dönem Harcamaları", "Karpayı", "Ödemeleriniz",
-  "Dönem Borcunuz", "Min. Ödeme", "HAPPY GOLD KART", "Ödeme ve Kâr",
-  "Toplam Borç", "Asgari Ödeme", "Akdi Kâr", "Gecikme Cezası",
-  "Bonus", "Kart Numarası", "Müşteri", "Azami", "Nakit Avans",
-  "Hesap Kesim", "Son Ödeme", "Yıllık", "Sayın", "MAH.", "Şubesi",
-  "TROY", "Fatura Hizmet Bedeli",
+  "Dönem Borcunuz", "Min. Ödeme", "Ödeme ve Kâr", "Toplam Borç",
+  "Asgari Ödeme", "Akdi Kâr", "Gecikme Cezası", "Kart Numarası",
+  "Müşteri Numarası", "Azami Harcama", "Nakit Avans", "Hesap Kesim",
+  "Son Ödeme Tarihi", "Yıllık Akdi", "Yıllık Gecikme", "Sayın;", "MAH.",
+  "Şubesi", "TROY GOLD", "İşlem Tarihi", "Dönem İçi İşlemler", "Sayfa :",
+  "NURULLAH", "TL Anapara", "Kar+Vergi", "Bugüne Kadar", "Devreden Bonus",
+  "Bu Dönem Kazanılan", "Bu Dönem Harcanan", "Harcanabilecek",
 ];
 
-const TF_CITIES: Record<string, string[]> = {
-  "İstanbul":  ["ISTANBUL", "İSTANBUL", "GAZİOSMANPAŞA", "GAZIOSMANPASA", "BAYR", "KUCUKKOY", "POLIGON"],
-  "Ordu":      ["ORDU", "ÜNYE", "UNYE"],
-  "Samsun":    ["SAMSUN"],
-  "Çankırı":   ["CANKIRI", "ÇANKIRI"],
-  "Ankara":    ["ANKARA"],
-  "Gaziantep": ["GAZİANTEP", "GAZIANTEP"],
+const TF_CITY_NAMES = [
+  "İSTANBUL", "ISTANBUL", "ORDU", "ÜNYE", "UNYE", "SAMSUN", "ÇANKIRI", "CANKIRI",
+  "ANKARA", "GAZİANTEP", "GAZIANTEP"
+];
+
+const TF_CITY_MAP: Record<string, string> = {
+  "İSTANBUL": "İstanbul", "ISTANBUL": "İstanbul",
+  "ORDU": "Ordu", "ÜNYE": "Ordu", "UNYE": "Ordu",
+  "SAMSUN": "Samsun",
+  "ÇANKIRI": "Çankırı", "CANKIRI": "Çankırı",
+  "ANKARA": "Ankara",
+  "GAZİANTEP": "Gaziantep", "GAZIANTEP": "Gaziantep",
 };
 
 const TF_CATEGORIES: Record<string, string[]> = {
-  "Akaryakıt":         ["SHELL", "PETROL", "OPET", "AKB AKARYAKIT", "ÇIRPICI SHELL", "CIRPICI SHELL"],
-  "Market":            ["BİM", "BIM", "A101", "CARREFOURSA", "GÖKKUŞAĞI", "EDA MARKET", "BİR MAR", "YAVUZ MARKET",
-                        "GIDA", "SERVETIM KURUYEMIS", "ASLANOĞLU FIRIN", "YUNUS TAVUKÇULUK", "EMİROĞLU"],
-  "Giyim/Alışveriş":  ["LCWAİKİKİ", "LCWAIKIKI", "DECATHLON", "GRATİS", "GRATIS", "MÜEZZİNOĞLU"],
-  "Restoran/Kafe":     ["MC DONALDS", "MCDONALD", "FAVORI CAFE", "FOCACCİA", "BÜFE", "HACI MUSTAFA"],
+  "Akaryakıt": ["SHELL", "PETROL", "OPET", "AKARYAKIT", "CEM PETROL"],
+  "Market": ["BİM", "BIM", "A101", "CARREFOURSA", "MARKET", "MERKET", "GÖKKUŞAĞI",
+             "GOKKUSAGI", "EDA MARKET", "BİR MAR", "BIR MAR", "YAVUZ MARKET",
+             "SERVETIM", "KURUYEMIS", "ASLANOĞLU", "ASLANOGLU", "FIRIN",
+             "YUNUS TAVUK", "EMİROĞLU", "EMIROGLU", "ENGIN GOKPINAR", "AHMET TURKMEN"],
+  "Giyim/Alışveriş": ["LCWAİKİKİ", "LCWAIKIKI", "LC WAIKIKI", "DECATHLON", "GRATİS", "GRATIS", "MÜEZZİNOĞLU", "MUEZZINOGLU", "AVM"],
+  "Restoran/Kafe": ["MC DONALDS", "MCDONALD", "FAVORI CAFE", "CAFE", "RESTORAN", "FOCACCİA", "FOCACCIA", "BÜFE", "BUFE", "HACI MUSTAFA"],
   "Çocuk/Anne-Bebek": ["EBEBEK"],
-  "Sağlık/Eczane":    ["ECZANE", "HASTANESİ", "HASTANE"],
-  "Fatura/Abonelik":  ["İGDAŞ", "IGDAS", "İSKİ", "ISKI", "TURKNET", "TÜRK TELEK", "TURK TELEK",
-                       "CK BOĞAZİÇ", "N KOLAY", "GUMRUK EXPORT", "HAKAN AÇIKKOLLU"],
-  "Diğer":            [],
+  "Sağlık/Eczane": ["ECZANE", "HASTANESİ", "HASTANESI", "HASTANE", "ŞEHİR HASTANESİ", "SEHIR HASTANESI"],
+  "Fatura/Abonelik": ["İGDAŞ", "IGDAS", "İSKİ", "ISKI", "TURKNET", "TÜRK TELEK", "TURK TELEK", "CK BOĞAZİÇ", "CK BOGAZIC", "N KOLAY", "GUMRUK EXPORT", "HAKAN AÇIKKOLLU", "5056915752", "4756650", "5457351510", "67471222", "500106008388", "0979427313"],
+  "Kâr Payı/Ücret": ["FATURA HİZMET BEDELİ", "FATURA HIZMET BEDELI"],
 };
 
+function tfNorm(s: string): string {
+  return s
+    .replace(/[“”]/g, '"')
+    .replace(/[’‘]/g, "'")
+    .replace(/İ/g, "I")
+    .replace(/ı/g, "i")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
+}
+
+function parseTfAmount(amount: string): number {
+  // Türkiye Finans: virgül binlik, nokta ondalık. Örn 1,660.00
+  return parseFloat(amount.replace(/,/g, ""));
+}
+
 function tfInferCity(merchant: string): string {
-  const upper = merchant.toUpperCase();
-  for (const [city, kws] of Object.entries(TF_CITIES)) {
-    if (kws.some(kw => upper.includes(kw))) return city;
+  const upper = tfNorm(merchant);
+
+  // Öncelik: satır sonundaki şehir + TR/TU kalıbı. Böylece "... SAMSUN TR" kesin Samsun olur.
+  const endCity = upper.match(new RegExp(`\\b(${TF_CITY_NAMES.map(tfNorm).join("|")})\\b\\s*(TR|TU)?\\s*$`));
+  if (endCity) return TF_CITY_MAP[endCity[1]] || TF_CITY_MAP[TF_CITY_NAMES.find(c => tfNorm(c) === endCity[1]) || ""] || "Bilinmiyor";
+
+  for (const city of TF_CITY_NAMES) {
+    if (upper.includes(tfNorm(city))) return TF_CITY_MAP[city] || "Bilinmiyor";
   }
   return "Bilinmiyor";
 }
 
 function tfInferCategory(merchant: string): string {
-  const upper = merchant.toUpperCase();
+  const upper = tfNorm(merchant);
   for (const [cat, kws] of Object.entries(TF_CATEGORIES)) {
-    if (kws.length > 0 && kws.some(kw => upper.includes(kw))) return cat;
+    if (kws.some(kw => upper.includes(tfNorm(kw)))) return cat;
   }
   return "Diğer";
 }
 
+function tfCleanMerchant(merchantRaw: string): string {
+  let merchant = merchantRaw
+    .replace(/\s+/g, " ")
+    .replace(/\s+\d+\\\d+\s*$/g, "")      // 3\3 taksit bilgisi
+    .replace(/\s+\d+\/\d+\s*$/g, "")       // 3/3 gelirse
+    .trim();
+
+  // Happy Bonus kolonu: tutardan hemen önce 0.04 / 1.66 gibi küçük sayı.
+  // Burada 100 altı ondalık sayıyı satır sonundan siliyoruz.
+  merchant = merchant.replace(/\s+\d{1,2}\.\d{2}\s*$/g, "").trim();
+
+  // Bazı PDF çıktılarında country kodları merchant içinde kalıyor; şehir yakalamak için kalsın,
+  // ama merchant adını temiz göstermek için sadece en sondaki TR/TU'yu atıyoruz.
+  merchant = merchant.replace(/\s+(TR|TU)\s*$/i, "").trim();
+  return merchant;
+}
+
 function parseTurkiyeFinansStatement(text: string, filename: string): Transaction[] {
-  const lines = text.split('\n');
   const transactions: Transaction[] = [];
 
-  // GG/AA/YYYY   merchant text   [optional bonus float]   tutar
-  const DATE_RE = /^(\d{2})\/(\d{2})\/(\d{4})\s+(.+)$/;
-  // Son tutarı yakala: 1.660,00 veya 1660.00 veya 126.00 formatları
-  const AMOUNT_RE = /(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})\s*$/;
+  // PDF satır kırılmalarında bazı satırlar bölünebildiği için önce satırları normalleştiriyoruz.
+  // Bir tarih satırı gördüğümüzde, yeni işlem başlamış kabul ediyoruz.
+  const rawLines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const candidateLines: string[] = [];
 
-  for (const rawLine of lines) {
-    const line = rawLine.trim().replace(/\s+/g, ' ');
+  for (const rawLine of rawLines) {
+    const line = rawLine.replace(/\s+/g, " ").trim();
     if (!line) continue;
-    if (TF_NOISE.some(n => line.includes(n))) continue;
+
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}\s+/.test(line)) {
+      candidateLines.push(line);
+    } else if (candidateLines.length > 0 && !/^\d+$/.test(line)) {
+      // Sadece önceki tarih satırının sonunda tutar yoksa devam satırını ekle.
+      // Böylece sayfa başlığı/altlığı veya TOPLAM TL gibi satırlar son işlemi bozmaz.
+      const last = candidateLines[candidateLines.length - 1];
+      const lastHasAmount = /[+-]?\d{1,3}(?:,\d{3})*\.\d{2}\s*(?:TL)?\s*$/.test(last);
+      if (!lastHasAmount && !line.includes("TL Anapara") && !line.includes("Kar+Vergi")) {
+        candidateLines[candidateLines.length - 1] += " " + line;
+      }
+    }
+  }
+
+  const DATE_RE = /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(.+)$/;
+  const AMOUNT_RE = /([+-]?\d{1,3}(?:,\d{3})*\.\d{2})\s*(?:TL)?\s*$/;
+
+  for (const raw of candidateLines) {
+    const line = raw.replace(/\s+/g, " ").trim();
+    const upperLine = tfNorm(line);
+    if (TF_NOISE.some(n => upperLine.includes(tfNorm(n)))) continue;
 
     const dm = line.match(DATE_RE);
     if (!dm) continue;
 
     const [, dayStr, monStr, yearStr, rest] = dm;
-    const day   = parseInt(dayStr, 10);
+    const day = parseInt(dayStr, 10);
     const month = parseInt(monStr, 10);
-    const year  = parseInt(yearStr, 10);
-    if (month < 1 || month > 12) continue;
-
-    const date    = new Date(year, month - 1, day);
-    const monthId = `${year}-${monStr}`;
+    const year = parseInt(yearStr, 10);
+    if (month < 1 || month > 12 || day < 1 || day > 31) continue;
 
     const am = rest.match(AMOUNT_RE);
-    if (!am) continue;
+    if (!am || am.index === undefined) continue;
 
-    // Tutarı parse et: hem "1.660,00" hem "1660.00" formatını destekle
-    let rawAmt = am[1];
-    if (rawAmt.includes(',')) {
-      // Türk formatı: 1.660,00
-      rawAmt = rawAmt.replace(/\./g, '').replace(',', '.');
-    }
-    const amountTry = parseFloat(rawAmt);
-    if (!isFinite(amountTry) || amountTry <= 0) continue;
+    const amountTry = parseTfAmount(am[1]);
+    // +23,229.68 ödeme/iadeyi harcama gibi sayma. İstersen burada negative olarak döndürebilirsin.
+    if (!isFinite(amountTry) || amountTry <= 0 || am[1].startsWith("+")) continue;
 
-    // Merchant: tutardan önce kalan metin
-    let merchantRaw = rest.substring(0, am.index!).trim();
-    // Taksit/bonus: "3\3" gibi gösterimleri kaldır
-    merchantRaw = merchantRaw.replace(/\s+\d+\\\d+\s*$/, '').trim();
-    // Küçük bonus sayısını kaldır (örn "0.04" veya "1.66" gibi 4 haneden az)
-    merchantRaw = merchantRaw.replace(/\s+\d{1,3}\.\d{2}$/, '').trim();
+    let merchantRaw = rest.substring(0, am.index).trim();
+    const merchant = tfCleanMerchant(merchantRaw);
 
-    if (!merchantRaw) continue;
+    if (!merchant) continue;
+    if (!/[A-Za-zÇĞİÖŞÜçğıöşü]/.test(merchant)) continue;
 
+    const mm = month.toString().padStart(2, "0");
     transactions.push({
-      date,
-      month: monthId,
-      merchant: merchantRaw,
+      date: new Date(year, month - 1, day),
+      month: `${year}-${mm}`,
+      merchant,
       amountTry,
       currency: "TRY",
       originalAmount: null,
       city: tfInferCity(merchantRaw),
-      category: tfInferCategory(merchantRaw),
+      category: tfInferCategory(merchant),
       statementCategory: "Türkiye Finans Happy Kart",
       rawLine: line,
       sourceFile: filename,
@@ -268,30 +312,23 @@ function parseTurkiyeFinansStatement(text: string, filename: string): Transactio
   return transactions;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
 // OTOMATIK FORMAT ALGILAMA + ANA EXPORT
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
 
-function detectFormat(text: string): "garanti" | "turkiyefinans" | "unknown" {
-  if (text.includes("TROY GOLD HAPPY") || text.includes("Türkiye Finans") ||
-      text.includes("turkiyefinans") || text.includes("HAPPY KART HESAP")) {
-    return "turkiyefinans";
-  }
-  if (text.includes("GARANTİ") || text.includes("BONUS PROGRAM ORTAKLARI") ||
-      text.includes("BONUS BEDAVA")) {
-    return "garanti";
-  }
-  // Tarih formatına göre tahmin et
-  if (/\d{2}\/\d{2}\/\d{4}/.test(text)) return "turkiyefinans";
-  if (/\d{1,2}\s+(?:Ocak|Şubat|Mart|Nisan|Mayıs|Haziran|Temmuz|Ağustos|Eylül|Ekim|Kasım|Aralık)/.test(text)) return "garanti";
-  return "unknown";
+function detectFormat(text: string): "garanti" | "turkiyefinans" {
+  if (
+    text.includes("TROY GOLD HAPPY") ||
+    text.includes("Türkiye Finans") ||
+    text.includes("turkiyefinans") ||
+    text.includes("HAPPY KART HESAP") ||
+    /\d{1,2}\/\d{1,2}\/\d{4}/.test(text)
+  ) return "turkiyefinans";
+  return "garanti";
 }
 
 export function parseStatement(text: string, filename: string): Transaction[] {
   const format = detectFormat(text);
-  if (format === "turkiyefinans") {
-    return parseTurkiyeFinansStatement(text, filename);
-  }
-  // Garanti veya bilinmeyen: Garanti parser'ı dene
+  if (format === "turkiyefinans") return parseTurkiyeFinansStatement(text, filename);
   return parseGarantiStatement(text, filename);
 }
