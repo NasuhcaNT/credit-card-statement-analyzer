@@ -29,7 +29,7 @@ export default function Upload({ onTransactionsParsed }: UploadProps) {
       }
 
       if (allTransactions.length === 0) {
-        setError("PDF'lerden işlem verisi bulunamadı. Desteklenen bir Garanti Bonus veya Türkiye Finans Happy Kart ekstresi olduğundan emin olun.");
+        setError("PDF'lerden işlem verisi bulunamadı. Desteklenen bir Garanti Bonus ekstresi olduğundan emin olun.");
       } else {
         onTransactionsParsed(allTransactions);
       }
@@ -61,7 +61,7 @@ export default function Upload({ onTransactionsParsed }: UploadProps) {
     <div className="w-full max-w-2xl mx-auto p-6 flex flex-col items-center">
       <div className="mb-8 text-center space-y-2">
         <h1 className="text-3xl font-bold tracking-tight text-primary">Kredi Kartı Ekstre Analizi</h1>
-        <p className="text-muted-foreground text-lg">Garanti Bonus veya Türkiye Finans Happy Kart PDF ekstrelerinizi yükleyin</p>
+        <p className="text-muted-foreground text-lg">Garanti Bonus PDF ekstrelerinizi yükleyin</p>
       </div>
 
       {error && (
