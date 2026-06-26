@@ -43,7 +43,7 @@ const CATEGORY_HEADERS = [
   "Mobilya & Aksesuar",
   "Konaklama",
   "Cafe & Restaurant",
-  "Market",
+  "Süpermarket",
   "Fast Food",
   "Pastane",
   "Bilgisayar",
@@ -54,7 +54,6 @@ const CATEGORY_HEADERS = [
   "YURT DIŞI HARCAMALARINIZ",
   "BONUS PROGRAM ORTAKLARI'NDA YAPTIĞINIZ HARCAMALAR",
   "BONUS PROGRAM ORTAKLARI DIŞI HARCAMALARINIZ",
-  "Finans",
 ];
 
 const NOISE_KEYWORDS = [
@@ -80,8 +79,6 @@ const COMMON_CITIES: Record<string, string[]> = {
   İstanbul: [
     "ISTANBUL",
     "İSTANBUL",
-    "IST",
-    "İST",
     "FATİH",
     "FATIH",
     "BEYOĞLU",
@@ -128,19 +125,6 @@ const COMMON_CITIES: Record<string, string[]> = {
     "BEYLIKDUZU",
     "ÜMRANİYE",
     "UMRANIYE",
-    "ASMALI",
-    "SUADIYE",
-    "KALAMIŞ",
-    "KOCAMUSTAFAPAŞA",
-    "CEVAHİR",
-    "KUZGUNCUK",
-    "HEKİMOĞLU",
-    "AKSARAY",
-    "BELBIM",
-    "PAŞA LİMANI",
-    "PERA",
-    "TEPEBASI",
-    "GRANDPERA",
   ],
   Ankara: [
     "ANKARA",
@@ -303,7 +287,7 @@ const COMMON_CATEGORIES: Record<string, string[]> = {
     "ENGIN GOKPINAR",
     "AHMET TURKMEN",
   ],
-  "Cafe & Restaurant": [
+  "Restoran/Kafe": [
     "CAFE",
     "KAFE",
     "RESTAURANT",
@@ -325,7 +309,6 @@ const COMMON_CATEGORIES: Record<string, string[]> = {
     "BÜFE",
     "BUFE",
     "HACI MUSTAFA",
-    "SOSYAL TESİS",
   ],
   "Giyim/Alışveriş": [
     "KOTON",
@@ -393,63 +376,6 @@ const COMMON_CATEGORIES: Record<string, string[]> = {
   "Müze/Gezi": ["MÜZE", "MUZE", "ÖRENYERİ", "ORENYERI", "KİLİSE", "KILISE"],
   "Çocuk/Anne-Bebek": ["EBEBEK"],
   "Kâr Payı/Ücret": ["FATURA HİZMET BEDELİ", "FATURA HIZMET BEDELI"],
-
-  Finans: [
-    "FAİZ",
-    "FAIZ",
-    "AKDİ KÂR PAYI",
-    "AKDI KAR PAYI",
-    "KÂR PAYI",
-    "KAR PAYI",
-    "GECİKME FAİZİ",
-    "GECIKME FAIZI",
-    "GECİKME CEZASI",
-    "GECIKME CEZASI",
-    "FATURA HİZMET BEDELİ",
-    "FATURA HIZMET BEDELI",
-    "KKDF",
-    "BSMV",
-    "VERGİ",
-    "VERGI",
-    "KREDİ FAİZİ",
-    "KREDI FAIZI",
-    "TAHSİLAT FAİZİ",
-    "TAHSILAT FAIZI",
-    "TEMERRÜT",
-    "TEMERRUT",
-    "NAKİT AVANS",
-    "NAKIT AVANS",
-    "NAKİT ÇEKİM",
-    "NAKIT CEKIM",
-    "OVERLIMIT",
-    "LİMİT AŞIM",
-    "LIMIT ASIM",
-    "BORÇ TRANSFER",
-    "BORC TRANSFER",
-    "KART ÜCRETİ",
-    "KART UCRETI",
-    "YILLIK KART ÜCRETİ",
-    "YILLIK KART UCRETI",
-    "KART AİDATI",
-    "KART AIDATI",
-    "AİDAT",
-    "AIDAT",
-    "EK KART ÜCRETİ",
-    "EK KART UCRETI",
-    "EFT ÜCRETİ",
-    "EFT UCRETI",
-    "FAST ÜCRETİ",
-    "FAST UCRETI",
-    "HAVALE ÜCRETİ",
-    "HAVALE UCRETI",
-    "DOSYA MASRAFI",
-    "HESAP İŞLETİM ÜCRETİ",
-    "HESAP ISLETIM UCRETI",
-    "BANKA KOMİSYONU",
-    "BANKA KOMISYONU",
-    "KOMİSYON",
-    "KOMISYON",
-  ],
 };
 
 function normText(s: string): string {
@@ -500,10 +426,43 @@ function inferCategory(merchant: string, statementHeader = ""): string {
   return "Bilinmiyor";
 }
 
+function parseTrAmount(amount: string): number {
+  return parseFloat(amount.replace(/\./g, "").replace(",", "."));
+}
+
+function buildMonthId(date: Date): string {
+  return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, "0")}`;
+}
+
+function extractGarantiStatementDate(text: string): Date | null {
+  const match = text.match(
+    /Hesap Kesim Tarihi\s+(\d{1,2})\s+([A-Za-zÃ‡ÄÄ°Ã–ÅÃœÃ§ÄŸÄ±Ã¶ÅŸÃ¼]+)\s+(\d{4})/,
+  );
+  if (!match) {
+    const fallback = text.match(
+      /Hesap Kesim Tarihi\s+(\d{1,2})\s+([^\s]+)\s+(\d{4})/,
+    );
+    if (!fallback) return null;
+    const [, dayStr, monthStr, yearStr] = fallback;
+    const monthNum = MONTHS_TR[monthStr];
+    if (!monthNum) return null;
+    return new Date(parseInt(yearStr, 10), monthNum - 1, parseInt(dayStr, 10));
+  }
+
+  const [, dayStr, monthStr, yearStr] = match;
+  const monthNum = MONTHS_TR[monthStr];
+  if (!monthNum) return null;
+
+  return new Date(parseInt(yearStr, 10), monthNum - 1, parseInt(dayStr, 10));
+}
+
 function parseGarantiStatement(text: string, filename: string): Transaction[] {
   const lines = text.split("\n");
   const transactions: Transaction[] = [];
   let currentCategory = "";
+  const statementDate = extractGarantiStatementDate(text);
+  const syntheticFeeRegex =
+    /^(DÃ–NEM FAÄ°ZÄ°|KKDF \+ BSMV|NAKÄ°T AVANS FAÄ°Z VE MASRAFI)\s+(\d{1,3}(?:\.\d{3})*,\d{2})$/i;
 
   for (const rawLine of lines) {
     const line = rawLine.trim().replace(/\s+/g, " ");
@@ -514,10 +473,83 @@ function parseGarantiStatement(text: string, filename: string): Transaction[] {
       continue;
     }
 
+    const normalizedLine = normText(line);
+    if (
+      statementDate &&
+      (normalizedLine.startsWith("DONEM FAIZI ") ||
+        normalizedLine.startsWith("KKDF + BSMV ") ||
+        normalizedLine.startsWith("NAKIT AVANS FAIZ VE MASRAFI "))
+    ) {
+      const amountMatch = line.match(/(\d{1,3}(?:\.\d{3})*,\d{2})\s*$/);
+      if (!amountMatch) continue;
+
+      transactions.push({
+        date: statementDate,
+        month: buildMonthId(statementDate),
+        merchant: line.substring(0, amountMatch.index).trim(),
+        amountTry: parseTrAmount(amountMatch[1]),
+        currency: "TRY",
+        originalAmount: null,
+        city: "Bilinmiyor",
+        category: "Faiz ve Ãœcretler",
+        statementCategory: "Ekstre Ã–zeti",
+        rawLine: line,
+        sourceFile: filename,
+      });
+      continue;
+    }
+
+    const syntheticFeeMatch = line.match(syntheticFeeRegex);
+    if (syntheticFeeMatch && statementDate) {
+      const merchant = syntheticFeeMatch[1];
+      const amountTry = parseTrAmount(syntheticFeeMatch[2]);
+      if (!isFinite(amountTry) || amountTry === 0) continue;
+
+      transactions.push({
+        date: statementDate,
+        month: buildMonthId(statementDate),
+        merchant,
+        amountTry,
+        currency: "TRY",
+        originalAmount: null,
+        city: "Bilinmiyor",
+        category: "Faiz ve Ãœcretler",
+        statementCategory: "Ekstre Ã–zeti",
+        rawLine: line,
+        sourceFile: filename,
+      });
+      continue;
+    }
+
     const dateMatch = line.match(
       /^(\d{1,2})\s+([A-Za-zÇĞİÖŞÜçğıöşü]+)\s+(\d{4})\s+(.+)$/,
     );
     if (!dateMatch) continue;
+
+    if (normText(dateMatch[4]).includes("BONUS BEDAVA")) {
+      const [_, dayStr, monthStr, yearStr, rest] = dateMatch;
+      const monthNum = MONTHS_TR[monthStr];
+      if (!monthNum) continue;
+
+      const bonusAmountMatch = rest.match(/(\d{1,3}(?:\.\d{3})*,\d{2})-\s*$/);
+      if (!bonusAmountMatch) continue;
+
+      const date = new Date(parseInt(yearStr), monthNum - 1, parseInt(dayStr));
+      transactions.push({
+        date,
+        month: `${yearStr}-${monthNum.toString().padStart(2, "0")}`,
+        merchant: rest.substring(0, bonusAmountMatch.index).trim(),
+        amountTry: -Math.abs(parseTrAmount(bonusAmountMatch[1])),
+        currency: "TRY",
+        originalAmount: null,
+        city: "Bilinmiyor",
+        category: "Bonus/Ä°ndirim",
+        statementCategory: "Ekstre Ã–zeti",
+        rawLine: line,
+        sourceFile: filename,
+      });
+      continue;
+    }
     if (
       NOISE_KEYWORDS.some((kw) => line.toLowerCase().includes(kw.toLowerCase()))
     )
@@ -530,13 +562,15 @@ function parseGarantiStatement(text: string, filename: string): Transaction[] {
     const date = new Date(parseInt(yearStr), monthNum - 1, parseInt(dayStr));
     const monthId = `${yearStr}-${monthNum.toString().padStart(2, "0")}`;
 
-    const amountMatch = rest.match(/(-?\d{1,3}(?:\.\d{3})*,\d{2})(\+)?\s*$/);
+    const amountMatch = rest.match(/(-?\d{1,3}(?:\.\d{3})*,\d{2})([+-])?\s*$/);
     if (!amountMatch) continue;
 
-    let amountStr = amountMatch[1].replace(/\./g, "").replace(",", ".");
-    let amountTry = parseFloat(amountStr);
-    if (amountMatch[2] === "+") amountTry = -amountTry;
-    if (amountTry <= 0) continue;
+    let amountTry = parseTrAmount(amountMatch[1]);
+    const trailingSign = amountMatch[2];
+    if (trailingSign === "+" || trailingSign === "-") {
+      amountTry = -Math.abs(amountTry);
+    }
+    if (!isFinite(amountTry) || amountTry === 0) continue;
 
     let restBeforeAmount = rest.substring(0, amountMatch.index).trim();
     restBeforeAmount = restBeforeAmount.replace(
@@ -565,6 +599,18 @@ function parseGarantiStatement(text: string, filename: string): Transaction[] {
 
     if (!merchant) continue;
 
+    let category = inferCategory(merchant, currentCategory);
+    const normalizedMerchant = normText(merchant);
+    if (normalizedMerchant.includes("BONUS BEDAVA")) category = "Bonus/Ä°ndirim";
+    if (
+      normalizedMerchant.includes("DONEM FAIZI") ||
+      normalizedMerchant.includes("KKDF") ||
+      normalizedMerchant.includes("BSMV") ||
+      normalizedMerchant.includes("NAKIT AVANS FAIZ")
+    ) {
+      category = "Faiz ve Ãœcretler";
+    }
+
     transactions.push({
       date,
       month: monthId,
@@ -573,7 +619,7 @@ function parseGarantiStatement(text: string, filename: string): Transaction[] {
       currency,
       originalAmount,
       city: inferCity(merchant),
-      category: inferCategory(merchant, currentCategory),
+      category,
       statementCategory: currentCategory,
       rawLine: line,
       sourceFile: filename,
@@ -672,6 +718,15 @@ function tfCleanMerchant(merchantRaw: string): string {
   return merchant;
 }
 
+function splitPdfTextIntoVisualLines(text: string): string[] {
+  return text
+    .replace(/\r/g, "\n")
+    .replace(/\s+(?=\d{1,2}\/\d{1,2}\/\d{4}\s+)/g, "\n")
+    .split("\n")
+    .map((l) => l.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
 function parseTurkiyeFinansStatement(
   text: string,
   filename: string,
@@ -680,10 +735,7 @@ function parseTurkiyeFinansStatement(
 
   // PDF satır kırılmalarında bazı satırlar bölünebildiği için önce satırları normalleştiriyoruz.
   // Bir tarih satırı gördüğümüzde, yeni işlem başlamış kabul ediyoruz.
-  const rawLines = text
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
+  const rawLines = splitPdfTextIntoVisualLines(text);
   const candidateLines: string[] = [];
 
   for (const rawLine of rawLines) {
@@ -692,19 +744,25 @@ function parseTurkiyeFinansStatement(
 
     if (/^\d{1,2}\/\d{1,2}\/\d{4}\s+/.test(line)) {
       candidateLines.push(line);
-    } else if (candidateLines.length > 0 && !/^\d+$/.test(line)) {
+      continue;
+    }
+
+    if (candidateLines.length > 0 && !/^\d+$/.test(line)) {
       // Sadece önceki tarih satırının sonunda tutar yoksa devam satırını ekle.
       // Böylece sayfa başlığı/altlığı veya TOPLAM TL gibi satırlar son işlemi bozmaz.
       const last = candidateLines[candidateLines.length - 1];
       const lastHasAmount = /[+-]?\d{1,3}(?:,\d{3})*\.\d{2}\s*(?:TL)?\s*$/.test(
         last,
       );
+      const isContinuationNoise =
+        /TL Anapara|Kar\+Vergi|TOPLAM TL|Sayfa\s*:|Ä°ÅŸlem Tarihi|DÃ¶nem Ä°Ã§i Ä°ÅŸlemler/i.test(
+          line,
+        );
       if (
         !lastHasAmount &&
-        !line.includes("TL Anapara") &&
-        !line.includes("Kar+Vergi")
+        !isContinuationNoise
       ) {
-        candidateLines[candidateLines.length - 1] += " " + line;
+        candidateLines[candidateLines.length - 1] = `${last} ${line}`;
       }
     }
   }
@@ -729,9 +787,11 @@ function parseTurkiyeFinansStatement(
     const am = rest.match(AMOUNT_RE);
     if (!am || am.index === undefined) continue;
 
-    const amountTry = parseTfAmount(am[1]);
-    // +23,229.68 ödeme/iadeyi harcama gibi sayma. İstersen burada negative olarak döndürebilirsin.
-    if (!isFinite(amountTry) || amountTry <= 0 || am[1].startsWith("+"))
+    const parsedAmount = parseTfAmount(am[1]);
+    const amountTry = am[1].startsWith("+") ? -parsedAmount : parsedAmount;
+    // Ödeme satırları zaten TF_NOISE ile eleniyor; kalan + tutarlar iade/alacak olarak
+    // dönem harcamasını düşürmeli ki PDF toplamıyla net toplam eşleşsin.
+    if (!isFinite(amountTry) || amountTry === 0)
       continue;
 
     let merchantRaw = rest.substring(0, am.index).trim();
